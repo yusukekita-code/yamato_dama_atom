@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI トリオ協議システム</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Meiryo',sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
+
+/* ── ヘッダー ── */
+header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);color:#fff;padding:20px 32px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+header h1{font-size:20px;font-weight:700;letter-spacing:1px}
+header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:4px}
+
+/* ── レイアウト ── */
+main{max-width:1400px;margin:0 auto;padding:24px 16px}
+
+/* ── 入力カード ── */
+.input-card{background:#fff;border-radius:12px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:20px}
+.input-card textarea{width:100%;min-height:90px;padding:13px;border:2px solid #e8eaed;border-radius:8px;font-size:15px;font-family:inherit;resize:vertical;line-height:1.7;transition:border-color .2s}
+.input-card textarea:focus{outline:none;border-color:#4285f4}
+.input-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.input-footer .hint{font-size:12px;color:#999}
+.btn-start{background:linear-gradient(135deg,#4285f4,#0f3460);color:#fff;border:none;border-radius:8px;padding:11px 30px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .15s,opacity .15s}
+.btn-start:hover:not(:disabled){transform:translateY(-1px);opacity:.92}
+.btn-start:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── プログレスバー ── */
+.progress-wrap{display:none;justify-content:center;align-items:center;margin-bottom:22px}
+.progress-wrap.show{display:flex}
+.prog-step{display:flex;flex-direction:column;align-items:center;gap:5px}
+.prog-circle{width:34px;height:34px;border-radius:50%;border:3px solid #ddd;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#bbb;transition:all .3s}
+.prog-step.active .prog-circle{border-color:#4285f4;background:#4285f4;color:#fff}
+.prog-step.done   .prog-circle{border-color:#34a853;background:#34a853;color:#fff}
+.prog-label{font-size:11px;color:#aaa;white-space:nowrap}
+.prog-step.active .prog-label{color:#4285f4;font-weight:600}
+.prog-step.done   .prog-label{color:#34a853}
+.prog-line{width:64px;height:3px;background:#ddd;margin:0 6px 18px;transition:background .3s}
+.prog-line.done{background:#34a853}
+
+/* ── ステップセクション ── */
+.step-section{display:none;margin-bottom:24px;animation:fadeUp .3s ease}
+.step-section.show{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.step-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.step-badge{background:#1a1a2e;color:#fff;padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:1px}
+.step-title{font-size:17px;font-weight:700}
+
+/* ── AIグリッド ── */
+.ai-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:900px){.ai-grid{grid-template-columns:1fr}}
+
+/* ── AIカード ── */
+.ai-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.ai-card-header{display:flex;align-items:center;gap:9px;padding:12px 16px;color:#fff;font-weight:700;font-size:14px}
+.ai-card.chatgpt .ai-card-header{background:#10a37f}
+.ai-card.gemini  .ai-card-header{background:#4285f4}
+.ai-card.claude  .ai-card-header{background:#c96442}
+.ai-icon{width:26px;height:26px;background:rgba(255,255,255,.22);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.model-label{font-size:10px;opacity:.75;margin-left:auto}
+
+.ai-card-body{padding:14px 16px;font-size:13.5px;line-height:1.8;color:#333;min-height:140px;max-height:380px;overflow-y:auto}
+.ai-card-body.loading{display:flex;align-items:center;justify-content:center;gap:10px;color:#aaa;min-height:140px}
+.spinner{width:18px;height:18px;border:3px solid #e0e0e0;border-top-color:#4285f4;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.ai-stats{display:flex;gap:14px;padding:7px 16px;background:#f8f9fa;border-top:1px solid #eee;font-size:11px;color:#777}
+
+/* マークダウン内スタイル */
+.ai-card-body h1,.ai-card-body h2,.ai-card-body h3{font-size:14px;margin:10px 0 5px;color:#1a1a2e}
+.ai-card-body p{margin-bottom:8px}
+.ai-card-body ul,.ai-card-body ol{margin:5px 0 8px 18px}
+.ai-card-body li{margin-bottom:3px}
+.ai-card-body strong{color:#1a1a2e}
+.ai-card-body code{background:#f0f2f5;padding:1px 5px;border-radius:3px;font-size:12px}
+
+/* ── 貢献度チャート ── */
+.contrib-card{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px}
+.contrib-title{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.contrib-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.contrib-label{width:100px;font-size:12px;font-weight:600;color:#444;flex-shrink:0}
+.contrib-bar-wrap{flex:1;background:#f0f2f5;border-radius:6px;height:22px;overflow:hidden}
+.contrib-bar{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;font-size:11px;color:rgba(255,255,255,.9);font-weight:700;transition:width .9s cubic-bezier(.4,0,.2,1);min-width:28px}
+.contrib-bar.chatgpt{background:#10a37f}
+.contrib-bar.gemini {background:#4285f4}
+.contrib-bar.claude {background:#c96442}
+.contrib-meta{font-size:11px;color:#888;white-space:nowrap;width:160px;flex-shrink:0}
+
+/* ── 最終回答 ── */
+.final-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.final-card-header{background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#fff;padding:14px 20px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.final-card-body{padding:20px;font-size:14.5px;line-height:1.85;color:#333}
+.final-card-body h2{font-size:16px;font-weight:700;margin:16px 0 8px;color:#1a1a2e;border-bottom:2px solid #f0f2f5;padding-bottom:5px}
+.final-card-body h3{font-size:14px;font-weight:700;margin:12px 0 5px;color:#444}
+.final-card-body p{margin-bottom:9px}
+.final-card-body ul,.final-card-body ol{margin:5px 0 9px 20px}
+.final-card-body li{margin-bottom:4px}
+.final-card-body strong{color:#1a1a2e}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 AI トリオ協議システム</h1>
+  <p>ChatGPT × Gemini × Claude が協議してベストアンサーを導き出します</p>
+</header>
+
+<main>
+
+  <!-- 入力 -->
+  <div class="input-card">
+    <textarea id="question" placeholder="質問・調査内容を入力してください…&#10;例：「日本の少子化問題の根本原因と効果的な対策は？」&#10;&#10;Shift+Enter で改行、Enter で送信"></textarea>
+    <div class="input-footer">
+      <span class="hint">3 AI × 3ステップで協議 ／ 1回あたり約 $0.02〜0.10</span>
+      <button class="btn-start" id="btn-start" onclick="startDiscussion()">🚀 協議開始</button>
+    </div>
+  </div>
+
+  <!-- プログレス -->
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="prog-step" id="prog1">
+      <div class="prog-circle">1</div>
+      <div class="prog-label">初回回答</div>
+    </div>
+    <div class="prog-line" id="pline1"></div>
+    <div class="prog-step" id="prog2">
+      <div class="prog-circle">2</div>
+      <div class="prog-label">相互レビュー</div>
+    </div>
+    <div class="prog-line" id="pline2"></div>
+    <div class="prog-step" id="prog3">
+      <div class="prog-circle">3</div>
+      <div class="prog-label">最終統合</div>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="step-section" id="sec1">
+    <div class="step-header">
+      <div class="step-badge">STEP 1</div>
+      <div class="step-title">各AIの初回回答</div>
+    </div>
+    <div class="ai-grid">
+      <div class="ai-card chatgpt">
+        <div class="ai-card-header">
+          <div class="ai-icon">💬</div>ChatGPT
+          <span class="model-label" id="model-chatgpt"></span>
+        </div>
+        <div class="ai-card-body loading" id="s1-chatgpt"><div class="spinner"></div>回答生成中…</div>
+        <div class="ai-stats" id="stat1-chatgpt" style="display:none">
+          <span>📝 <b id="c1-chatgpt">-</b> 字</span>
+          <span>❓ <b id="q1-chatgpt">-</b> 質問</span>
+        </div>
+      </div>
+      <div class="ai-card gemini">
+        <div class="ai-card-header">
+          <div class="ai-icon">✨</div>Gemini
+        </div>
+        <div class="ai-card-body loading" id="s1-gemini"><div class="spinner"></div>回答生成中…</div>
+        <div class="ai-stats" id="stat1-gemini" style="display:none">
+          <span>📝 <b id="c1-gemini">-</b> 字</span>
+          <span>❓ <b id="q1-gemini">-</b> 質問</span>
+        </div>
+      </div>
+      <div class="ai-card claude">
+        <div class="ai-card-header">
+          <div class="ai-icon">🧠</div>Claude
+        </div>
+        <div class="ai-card-body loading" id="s1-claude"><div class="spinner"></div>回答生成中…</div>
+        <div class="ai-stats" id="stat1-claude" style="display:none">
+          <span>📝 <b id="c1-claude">-</b> 字</span>
+          <span>❓ <b id="q1-claude">-</b> 質問</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step-section" id="sec2">
+    <div class="step-header">
+      <div class="step-badge">STEP 2</div>
+      <div class="step-title">相互レビュー（他のAIの回答を読んで追記・修正）</div>
+    </div>
+    <div class="ai-grid">
+      <div class="ai-card chatgpt">
+        <div class="ai-card-header"><div class="ai-icon">💬</div>ChatGPT のレビュー</div>
+        <div class="ai-card-body loading" id="s2-chatgpt"><div class="spinner"></div>レビュー生成中…</div>
+        <div class="ai-stats" id="stat2-chatgpt" style="display:none">
+          <span>📝 <b id="c2-chatgpt">-</b> 字</span>
+          <span>❓ <b id="q2-chatgpt">-</b> 質問</span>
+        </div>
+      </div>
+      <div class="ai-card gemini">
+        <div class="ai-card-header"><div class="ai-icon">✨</div>Gemini のレビュー</div>
+        <div class="ai-card-body loading" id="s2-gemini"><div class="spinner"></div>レビュー生成中…</div>
+        <div class="ai-stats" id="stat2-gemini" style="display:none">
+          <span>📝 <b id="c2-gemini">-</b> 字</span>
+          <span>❓ <b id="q2-gemini">-</b> 質問</span>
+        </div>
+      </div>
+      <div class="ai-card claude">
+        <div class="ai-card-header"><div class="ai-icon">🧠</div>Claude のレビュー</div>
+        <div class="ai-card-body loading" id="s2-claude"><div class="spinner"></div>レビュー生成中…</div>
+        <div class="ai-stats" id="stat2-claude" style="display:none">
+          <span>📝 <b id="c2-claude">-</b> 字</span>
+          <span>❓ <b id="q2-claude">-</b> 質問</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step-section" id="sec3">
+    <div class="step-header">
+      <div class="step-badge">STEP 3</div>
+      <div class="step-title">最終統合回答 &amp; 貢献度分析</div>
+    </div>
+
+    <!-- 貢献度チャート -->
+    <div class="contrib-card" id="contrib-card" style="display:none">
+      <div class="contrib-title">📊 貢献度比較（文字数・質問数ベース）</div>
+      <div class="contrib-row">
+        <div class="contrib-label">💬 ChatGPT</div>
+        <div class="contrib-bar-wrap"><div class="contrib-bar chatgpt" id="bar-chatgpt" style="width:0%">-</div></div>
+        <div class="contrib-meta" id="meta-chatgpt">-</div>
+      </div>
+      <div class="contrib-row">
+        <div class="contrib-label">✨ Gemini</div>
+        <div class="contrib-bar-wrap"><div class="contrib-bar gemini" id="bar-gemini" style="width:0%">-</div></div>
+        <div class="contrib-meta" id="meta-gemini">-</div>
+      </div>
+      <div class="contrib-row">
+        <div class="contrib-label">🧠 Claude</div>
+        <div class="contrib-bar-wrap"><div class="contrib-bar claude" id="bar-claude" style="width:0%">-</div></div>
+        <div class="contrib-meta" id="meta-claude">-</div>
+      </div>
+    </div>
+
+    <!-- 最終回答 -->
+    <div class="final-card">
+      <div class="final-card-header">🏆 最終統合回答（GPT-4o による統合）</div>
+      <div class="final-card-body" id="final-body">
+        <div style="display:flex;align-items:center;gap:12px;color:#aaa;justify-content:center;padding:40px">
+          <div class="spinner"></div>統合回答を生成中…
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+<script>
+marked.use({ breaks: true, gfm: true });
+
+const $  = id => document.getElementById(id);
+const AIs = ['chatgpt', 'gemini', 'claude'];
+
+let s1Data = null, s2Data = null;
+
+// ── ユーティリティ ──────────────────────────────────────────────────
+function countChars(t)     { return (t || '').length; }
+function countQuestions(t) { return ((t || '').match(/[？?]|【質問】/g) || []).length; }
+
+function setProgress(step) {
+  [1,2,3].forEach(n => {
+    const el = $('prog'+n);
+    if (n < step) {
+      el.className = 'prog-step done';
+      el.querySelector('.prog-circle').textContent = '✓';
+    } else if (n === step) {
+      el.className = 'prog-step active';
+    } else {
+      el.className = 'prog-step';
+      el.querySelector('.prog-circle').textContent = n;
+    }
+    if (n < 3) $('pline'+n).className = n < step ? 'prog-line done' : 'prog-line';
+  });
+}
+
+function renderCard(bodyId, statId, cId, qId, text) {
+  const el = $(bodyId);
+  el.className = 'ai-card-body';
+  el.innerHTML = marked.parse(text || '⚠️ 取得失敗');
+  $(cId).textContent = countChars(text).toLocaleString();
+  $(qId).textContent = countQuestions(text);
+  $(statId).style.display = 'flex';
+}
+
+function renderContrib(s1, s2) {
+  const scores = {}, qs = {};
+  AIs.forEach(n => {
+    scores[n] = countChars(s1[n]) + countChars(s2[n]);
+    qs[n]     = countQuestions(s1[n]) + countQuestions(s2[n]);
+  });
+  const total = Object.values(scores).reduce((a,b)=>a+b,0) || 1;
+  $('contrib-card').style.display = 'block';
+  AIs.forEach(n => {
+    const pct = Math.round(scores[n]/total*100);
+    const bar = $('bar-'+n);
+    bar.textContent = pct+'%';
+    setTimeout(() => bar.style.width = pct+'%', 50);
+    $('meta-'+n).textContent = `総字数 ${scores[n].toLocaleString()} ／ 質問 ${qs[n]}件`;
+  });
+}
+
+async function post(url, data) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!r.ok) throw new Error(`サーバーエラー: HTTP ${r.status}`);
+  return r.json();
+}
+
+function scrollTo(id) {
+  setTimeout(() => $(id).scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+}
+
+function resetCards() {
+  AIs.forEach(n => {
+    ['s1-','s2-'].forEach(p => {
+      const el = $(p+n);
+      if (el) { el.className='ai-card-body loading'; el.innerHTML='<div class="spinner"></div>生成中…'; }
+      const st = $(p.replace('-','')+'-'+n+'-stats') || $('stat'+(p==='s1-'?1:2)+'-'+n);
+      if (st) st.style.display='none';
+    });
+  });
+  $('contrib-card').style.display = 'none';
+  $('final-body').innerHTML = '<div style="display:flex;align-items:center;gap:12px;color:#aaa;justify-content:center;padding:40px"><div class="spinner"></div>統合回答を生成中…</div>';
+  ['sec1','sec2','sec3'].forEach(id => $(id).classList.remove('show'));
+}
+
+// ── メイン処理 ─────────────────────────────────────────────────────
+async function startDiscussion() {
+  const question = $('question').value.trim();
+  if (!question) { alert('質問を入力してください'); return; }
+
+  $('btn-start').disabled = true;
+  $('btn-start').textContent = '⏳ 協議中…';
+  $('progress-wrap').classList.add('show');
+  resetCards();
+
+  try {
+    // ── STEP 1 ──
+    setProgress(1);
+    $('sec1').classList.add('show');
+
+    s1Data = await post('/api/step1', { question });
+    AIs.forEach(n => renderCard(`s1-${n}`, `stat1-${n}`, `c1-${n}`, `q1-${n}`, s1Data[n]));
+
+    // ── STEP 2 ──
+    setProgress(2);
+    $('sec2').classList.add('show');
+    scrollTo('sec2');
+
+    s2Data = await post('/api/step2', { question, step1: s1Data });
+    AIs.forEach(n => renderCard(`s2-${n}`, `stat2-${n}`, `c2-${n}`, `q2-${n}`, s2Data[n]));
+
+    // ── STEP 3 ──
+    setProgress(3);
+    $('sec3').classList.add('show');
+    scrollTo('sec3');
+    renderContrib(s1Data, s2Data);
+
+    const s3 = await post('/api/step3', { question, step1: s1Data, step2: s2Data });
+    $('final-body').innerHTML = marked.parse(s3.result || '⚠️ 取得失敗');
+
+  } catch(e) {
+    alert('エラーが発生しました:\n' + e.message);
+  } finally {
+    $('btn-start').disabled = false;
+    $('btn-start').textContent = '🚀 協議開始';
+  }
+}
+
+// Enter送信 / Shift+Enter改行
+$('question').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!$('btn-start').disabled) startDiscussion();
+  }
+});
+</script>
+</body>
+</html>

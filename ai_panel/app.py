@@ -1,0 +1,166 @@
+from flask import Flask, render_template, request, jsonify
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+import openai
+import google.generativeai as genai
+import anthropic
+
+app = Flask(__name__)
+
+# ── クライアント初期化 ──────────────────────────────────────────────
+openai_client    = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+
+OPENAI_MODEL      = os.getenv('OPENAI_MODEL',      'gpt-4o-mini')
+GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-1.5-flash')
+CLAUDE_MODEL      = os.getenv('CLAUDE_MODEL',      'claude-haiku-4-5-20251001')
+SYNTHESIZER_MODEL = os.getenv('SYNTHESIZER_MODEL', 'gpt-4o')
+
+BASE_SYSTEM = "あなたは優秀で論理的なAIアシスタントです。回答は日本語で行ってください。"
+
+# ── AI呼び出し関数 ─────────────────────────────────────────────────
+def ask_gpt(prompt: str, model: str = None) -> str:
+    resp = openai_client.chat.completions.create(
+        model=model or OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": BASE_SYSTEM},
+            {"role": "user",   "content": prompt}
+        ],
+        max_tokens=2000
+    )
+    return resp.choices[0].message.content
+
+def ask_gemini(prompt: str) -> str:
+    try:
+        m = genai.GenerativeModel(GEMINI_MODEL, system_instruction=BASE_SYSTEM)
+    except TypeError:
+        m = genai.GenerativeModel(GEMINI_MODEL)
+    return m.generate_content(prompt).text
+
+def ask_claude(prompt: str) -> str:
+    resp = anthropic_client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2000,
+        system=BASE_SYSTEM,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return resp.content[0].text
+
+CALLERS = {
+    'chatgpt': ask_gpt,
+    'gemini':  ask_gemini,
+    'claude':  ask_claude,
+}
+
+def run_parallel(prompts: dict) -> dict:
+    """prompts = {ai_name: prompt}  →  {ai_name: response}"""
+    out = {}
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futs = {ex.submit(CALLERS[n], p): n for n, p in prompts.items()}
+        for f in as_completed(futs):
+            n = futs[f]
+            try:
+                out[n] = f.result()
+            except Exception as e:
+                out[n] = f"⚠️ エラー: {e}"
+    return out
+
+# ── ルート ─────────────────────────────────────────────────────────
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/step1', methods=['POST'])
+def step1():
+    q = request.json['question']
+    prompt = (
+        f"以下の質問に詳しく回答してください。\n"
+        f"・主要なポイントを明確に述べること\n"
+        f"・具体例や根拠を含めること\n"
+        f"・追加情報が必要な場合は【質問】として明記すること\n\n"
+        f"質問: {q}"
+    )
+    return jsonify(run_parallel({k: prompt for k in CALLERS}))
+
+@app.route('/api/step2', methods=['POST'])
+def step2():
+    data = request.json
+    q, s1 = data['question'], data['step1']
+
+    def make_prompt(my_name):
+        others = "\n\n".join(
+            f"【{n} の回答】\n{r}" for n, r in s1.items() if n != my_name
+        )
+        return (
+            f"元の質問: {q}\n\n"
+            f"【あなたの初回回答】\n{s1[my_name]}\n\n"
+            f"【他のAIの回答】\n{others}\n\n"
+            f"上記を踏まえて以下を行ってください：\n"
+            f"1. 他のAIの回答で評価できる点・参考になる点\n"
+            f"2. あなたの回答の補足・修正事項\n"
+            f"3. まだカバーされていない重要な観点の追加\n"
+            f"4. 残る疑問点があれば【質問】として明記"
+        )
+
+    return jsonify(run_parallel({k: make_prompt(k) for k in CALLERS}))
+
+@app.route('/api/step3', methods=['POST'])
+def step3():
+    data = request.json
+    q, s1, s2 = data['question'], data['step1'], data['step2']
+
+    prompt = f"""質問: {q}
+
+=== 各AIの初回回答 ===
+[ChatGPT]
+{s1.get('chatgpt','')}
+
+[Gemini]
+{s1.get('gemini','')}
+
+[Claude]
+{s1.get('claude','')}
+
+=== 各AIの相互レビュー ===
+[ChatGPT レビュー]
+{s2.get('chatgpt','')}
+
+[Gemini レビュー]
+{s2.get('gemini','')}
+
+[Claude レビュー]
+{s2.get('claude','')}
+
+以上をすべて統合して、以下の形式で出力してください：
+
+## 最終統合回答
+（ここに包括的・完全な回答を記述）
+
+## 各AIの貢献分析
+
+### ChatGPT
+- 独自の観点: （特徴的な貢献を具体的に記述）
+- 全体評価: （S／A／B／C）
+
+### Gemini
+- 独自の観点: （特徴的な貢献を具体的に記述）
+- 全体評価: （S／A／B／C）
+
+### Claude
+- 独自の観点: （特徴的な貢献を具体的に記述）
+- 全体評価: （S／A／B／C）
+
+## 未解決の重要な質問
+（各AIが提起した中で未回答の重要な疑問点があれば列挙）"""
+
+    # Step3はより高品質なモデルで統合
+    result = ask_gpt(prompt, model=SYNTHESIZER_MODEL)
+    return jsonify({'result': result})
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

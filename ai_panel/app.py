@@ -6,9 +6,10 @@ import re
 
 load_dotenv()
 
+import urllib.request
+import urllib.error
+import json
 import openai
-from google import genai
-from google.genai import types as genai_types
 import anthropic
 
 app = Flask(__name__)
@@ -16,7 +17,7 @@ app = Flask(__name__)
 # ── クライアント初期化 ──────────────────────────────────────────────
 openai_client    = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-gemini_client    = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+GEMINI_API_KEY   = os.getenv('GEMINI_API_KEY', '')
 
 OPENAI_MODEL      = os.getenv('OPENAI_MODEL',      'gpt-4o-mini')
 GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.0-flash')
@@ -38,29 +39,41 @@ def ask_gpt(prompt: str, model: str = None) -> str:
     return resp.choices[0].message.content
 
 GEMINI_FALLBACKS = [
+    'gemini-2.5-flash',
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
     'gemini-1.5-pro',
 ]
 
+_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={key}'
+
+def _gemini_call(model_name: str, prompt: str) -> str:
+    """Gemini v1 REST API を直接呼び出す（ライブラリ非依存）"""
+    url     = _GEMINI_ENDPOINT.format(model=model_name, key=GEMINI_API_KEY)
+    payload = json.dumps({
+        'system_instruction': {'parts': [{'text': BASE_SYSTEM}]},
+        'contents':           [{'role': 'user', 'parts': [{'text': prompt}]}],
+        'generationConfig':   {'maxOutputTokens': 2000},
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload,
+                                 headers={'Content-Type': 'application/json'},
+                                 method='POST')
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+    return data['candidates'][0]['content']['parts'][0]['text']
+
 def ask_gemini(prompt: str) -> str:
     models_to_try = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]
     errors = []
     for model_name in models_to_try:
         try:
-            response = gemini_client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=BASE_SYSTEM,
-                    max_output_tokens=2000,
-                )
-            )
-            return response.text
+            return _gemini_call(model_name, prompt)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')
+            errors.append(f'  [{model_name}] HTTP {e.code}: {body[:300]}')
         except Exception as e:
             errors.append(f'  [{model_name}] {e}')
-            continue
     raise Exception('全Geminiモデルで失敗しました:\n' + '\n'.join(errors))
 
 def ask_claude(prompt: str) -> str:
@@ -132,6 +145,46 @@ def run_parallel(prompts: dict) -> dict:
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/api/test-connection', methods=['GET'])
+def test_connection():
+    """各AIへの接続テスト（短いプロンプトで確認）"""
+    test_prompt = '「OK」とだけ返してください。'
+    results = {}
+
+    # ChatGPT
+    try:
+        ask_gpt(test_prompt)
+        results['chatgpt'] = {'ok': True, 'model': OPENAI_MODEL}
+    except Exception as e:
+        results['chatgpt'] = {'ok': False, 'error': str(e)[:300]}
+
+    # Gemini
+    models_to_try = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]
+    gemini_ok = False
+    for model_name in models_to_try:
+        try:
+            _gemini_call(model_name, test_prompt)
+            results['gemini'] = {'ok': True, 'model': model_name}
+            gemini_ok = True
+            break
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')
+            results['gemini'] = {'ok': False, 'error': f'HTTP {e.code}: {body[:300]}', 'tried': model_name}
+        except Exception as e:
+            results['gemini'] = {'ok': False, 'error': str(e)[:300], 'tried': model_name}
+    if not gemini_ok and 'gemini' not in results:
+        results['gemini'] = {'ok': False, 'error': '全モデル失敗'}
+
+    # Claude
+    try:
+        ask_claude(test_prompt)
+        results['claude'] = {'ok': True, 'model': CLAUDE_MODEL}
+    except Exception as e:
+        results['claude'] = {'ok': False, 'error': str(e)[:300]}
+
+    return jsonify(results)
+
 
 @app.route('/api/load-self', methods=['GET'])
 def load_self():

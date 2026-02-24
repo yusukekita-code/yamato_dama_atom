@@ -14,6 +14,15 @@ header h1{font-size:20px;font-weight:700;letter-spacing:1px}
 header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:4px}
 .btn-shutdown{background:rgba(220,50,50,.85);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap}
 .btn-shutdown:hover{background:rgba(220,50,50,1)}
+.btn-test{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s;white-space:nowrap}
+.btn-test:hover{background:rgba(255,255,255,.28)}
+.btn-test:disabled{opacity:.5;cursor:not-allowed}
+/* テスト結果バー */
+.test-result-bar{display:none;background:rgba(0,0,0,.25);border-radius:8px;padding:10px 16px;margin-top:10px;font-size:12px;color:#fff;display:flex;gap:18px;flex-wrap:wrap}
+.test-item{display:flex;align-items:center;gap:5px}
+.test-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.test-dot.ok{background:#2ecc71}.test-dot.ng{background:#e74c3c}.test-dot.wait{background:#f39c12;animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* ── レイアウト ── */
 main{max-width:1400px;margin:0 auto;padding:24px 16px}
@@ -162,11 +171,15 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 <body>
 
 <header>
-  <div>
+  <div style="flex:1;min-width:0">
     <h1>🤖 AI トリオ協議システム</h1>
     <p>ChatGPT × Gemini × Claude が協議してベストアンサーを導き出します</p>
+    <div id="test-result-bar" style="display:none;margin-top:8px;display:none;gap:16px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.85)"></div>
   </div>
-  <button class="btn-shutdown" onclick="shutdownServer()">🔴 サーバーを停止</button>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="btn-test" id="btn-test" onclick="testConnection()">🔌 接続テスト</button>
+    <button class="btn-shutdown" onclick="shutdownServer()">🔴 サーバーを停止</button>
+  </div>
 </header>
 
 <main>
@@ -525,6 +538,35 @@ function resetCards() {
     if (el) { el.className='ai-card-body loading'; el.innerHTML='<div class="spinner"></div>回答生成中…'; }
   });
   fData = null; s3Result = null;
+}
+
+// ── 接続テスト ──────────────────────────────────────────────────────
+async function testConnection() {
+  const btn = $('btn-test');
+  const bar = $('test-result-bar');
+  btn.disabled = true;
+  btn.textContent = '🔌 テスト中…';
+
+  const aiNames = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
+  bar.style.display = 'flex';
+  bar.innerHTML = ['chatgpt','gemini','claude'].map(n =>
+    `<span class="test-item"><span class="test-dot wait"></span>${aiNames[n]}: 確認中…</span>`
+  ).join('');
+
+  try {
+    const res = await fetch('/api/test-connection').then(r => r.json());
+    bar.innerHTML = Object.entries(res).map(([n, r]) => {
+      const cls  = r.ok ? 'ok' : 'ng';
+      const icon = r.ok ? '✅' : '❌';
+      const detail = r.ok ? (r.model || '') : r.error || '';
+      return `<span class="test-item"><span class="test-dot ${cls}"></span>${icon} ${aiNames[n]||n}: ${r.ok ? r.model : detail.substring(0,80)}</span>`;
+    }).join('');
+  } catch(e) {
+    bar.innerHTML = `<span>⚠️ テスト失敗: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔌 接続テスト';
+  }
 }
 
 // ── エラーモーダル ──────────────────────────────────────────────────

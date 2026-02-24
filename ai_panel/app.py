@@ -36,7 +36,7 @@ def ask_gpt(prompt: str, model: str = None) -> str:
     )
     return resp.choices[0].message.content
 
-GEMINI_FALLBACKS = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
+GEMINI_FALLBACKS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b']
 
 def ask_gemini(prompt: str) -> str:
     models_to_try = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]

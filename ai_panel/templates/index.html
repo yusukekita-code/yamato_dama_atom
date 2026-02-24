@@ -143,6 +143,20 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 .btn-proceed{background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s}
 .btn-proceed:hover:not(:disabled){opacity:.88}.btn-proceed:disabled{opacity:.5;cursor:not-allowed}
 .extend-note{font-size:12px;color:#e74c3c;font-weight:600}
+
+/* ── エラーモーダル ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:26px;max-width:560px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.3);animation:fadeUp .2s ease}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:14px;color:#1a1a2e;display:flex;align-items:center;gap:8px}
+.modal-body{background:#f8f9fa;border-radius:8px;padding:13px;font-size:12.5px;font-family:monospace;color:#333;max-height:220px;overflow-y:auto;margin-bottom:18px;white-space:pre-wrap;word-break:break-all;border:1px solid #e8eaed}
+.modal-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.modal-btn-copy{background:#f0f2f5;border:1px solid #ddd;border-radius:6px;padding:8px 14px;font-size:13px;cursor:pointer;color:#444;transition:background .15s;margin-right:auto}
+.modal-btn-copy:hover{background:#e4e6e9}
+.modal-btn-continue{background:linear-gradient(135deg,#4285f4,#0f3460);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.modal-btn-continue:hover{opacity:.88}
+.modal-btn-reset{background:#fff;border:2px solid #dc3545;color:#dc3545;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
+.modal-btn-reset:hover{background:#dc3545;color:#fff}
 </style>
 </head>
 <body>
@@ -389,6 +403,19 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 
 </main>
 
+<!-- エラーモーダル -->
+<div class="modal-overlay" id="error-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚠️ エラーが発生しました</div>
+    <div class="modal-body" id="error-modal-body"></div>
+    <div class="modal-actions">
+      <button class="modal-btn-copy" onclick="copyModalError()">📋 エラーをコピー</button>
+      <button class="modal-btn-reset" onclick="resolveErrorModal(false)">✕ 最初に戻る</button>
+      <button class="modal-btn-continue" onclick="resolveErrorModal(true)">→ このまま続行</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <script>
 marked.use({ breaks: true, gfm: true });
@@ -500,6 +527,30 @@ function resetCards() {
   fData = null; s3Result = null;
 }
 
+// ── エラーモーダル ──────────────────────────────────────────────────
+let errorModalResolve = null;
+
+function showErrorModal(message) {
+  return new Promise(resolve => {
+    errorModalResolve = resolve;
+    $('error-modal-body').textContent = message;
+    $('error-modal').classList.add('show');
+  });
+}
+function resolveErrorModal(proceed) {
+  $('error-modal').classList.remove('show');
+  if (errorModalResolve) { errorModalResolve(proceed); errorModalResolve = null; }
+}
+function copyModalError() {
+  const text = $('error-modal-body').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.modal-btn-copy');
+    const orig = btn.textContent;
+    btn.textContent = '✅ コピー完了';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
 // ── 参考資料折り畳み ────────────────────────────────────────────────
 function toggleContext() {
   $('context-wrap').classList.toggle('collapsed');
@@ -597,10 +648,9 @@ async function startDiscussion() {
     const errors1 = detectErrors(s1Data);
     if (errors1.length > 0) {
       const aiNames = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
-      const errMsgs = errors1.map(([n, msg]) => `・${aiNames[n]}: ${msg.substring(0, 100)}`).join('\n');
-      const proceed = confirm(
-        `${errors1.length}件のエラーが発生しました:\n\n${errMsgs}\n\nこのままStep2（相互レビュー）に進みますか？\n（Noを選ぶと最初に戻ります）`
-      );
+      const errMsgs = errors1.map(([n, msg]) => `・${aiNames[n]}: ${msg}`).join('\n');
+      const message = `${errors1.length}件のエラーが発生しました:\n\n${errMsgs}\n\nこのままStep F（ファシリテーター）に進みますか？`;
+      const proceed = await showErrorModal(message);
       if (!proceed) {
         resetCards();
         $('progress-wrap').classList.remove('show');

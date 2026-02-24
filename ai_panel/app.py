@@ -51,7 +51,7 @@ def _gemini_call(model_name: str, prompt: str) -> str:
     payload = json.dumps({
         'system_instruction': {'parts': [{'text': BASE_SYSTEM}]},
         'contents':           [{'role': 'user', 'parts': [{'text': prompt}]}],
-        'generationConfig':   {'maxOutputTokens': 2000},
+        'generationConfig':   {'maxOutputTokens': 8192},
     }).encode('utf-8')
     req = urllib.request.Request(url, data=payload,
                                  headers={'Content-Type': 'application/json'},

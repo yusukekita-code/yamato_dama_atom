@@ -193,5 +193,9 @@ def step3():
     result = ask_gpt(prompt, model=SYNTHESIZER_MODEL)
     return jsonify({'result': result})
 
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown():
+    os._exit(0)
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)

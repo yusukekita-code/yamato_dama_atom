@@ -9,9 +9,11 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Meiryo',sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
 
 /* ── ヘッダー ── */
-header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);color:#fff;padding:20px 32px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);color:#fff;padding:20px 32px;box-shadow:0 2px 12px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:space-between}
 header h1{font-size:20px;font-weight:700;letter-spacing:1px}
 header p{font-size:12px;color:rgba(255,255,255,.55);margin-top:4px}
+.btn-shutdown{background:rgba(220,50,50,.85);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap}
+.btn-shutdown:hover{background:rgba(220,50,50,1)}
 
 /* ── レイアウト ── */
 main{max-width:1400px;margin:0 auto;padding:24px 16px}
@@ -113,8 +115,11 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 <body>
 
 <header>
-  <h1>🤖 AI トリオ協議システム</h1>
-  <p>ChatGPT × Gemini × Claude が協議してベストアンサーを導き出します</p>
+  <div>
+    <h1>🤖 AI トリオ協議システム</h1>
+    <p>ChatGPT × Gemini × Claude が協議してベストアンサーを導き出します</p>
+  </div>
+  <button class="btn-shutdown" onclick="shutdownServer()">🔴 サーバーを停止</button>
 </header>
 
 <main>
@@ -353,6 +358,17 @@ function resetCards() {
   $('contrib-card').style.display = 'none';
   $('final-body').innerHTML = '<div style="display:flex;align-items:center;gap:12px;color:#aaa;justify-content:center;padding:40px"><div class="spinner"></div>統合回答を生成中…</div>';
   ['sec1','sec2','sec3'].forEach(id => $(id).classList.remove('show'));
+}
+
+// ── サーバー停止 ────────────────────────────────────────────────────
+async function shutdownServer() {
+  if (!confirm('サーバーを停止しますか？\nブラウザのタブも閉じてください。')) return;
+  try {
+    await fetch('/api/shutdown', { method: 'POST' });
+  } catch(e) {
+    // サーバーが止まるので fetch は必ずエラーになる（正常）
+  }
+  document.body.innerHTML = '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-size:18px;color:#666;font-family:sans-serif">🔴 サーバーを停止しました。このタブを閉じてください。</div>';
 }
 
 // ── このシステムを読み込む ──────────────────────────────────────────

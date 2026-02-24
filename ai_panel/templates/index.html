@@ -110,6 +110,39 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 .final-card-body ul,.final-card-body ol{margin:5px 0 9px 20px}
 .final-card-body li{margin-bottom:4px}
 .final-card-body strong{color:#1a1a2e}
+
+/* ── コピーボタン ── */
+.btn-copy{background:rgba(255,255,255,.18);border:none;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;color:rgba(255,255,255,.85);margin-left:8px;transition:background .15s;flex-shrink:0}
+.btn-copy:hover{background:rgba(255,255,255,.35)}
+
+/* ── 参考資料折り畳み ── */
+.context-wrap.collapsed #context,.context-wrap.collapsed .context-hint{display:none}
+.context-toggle-btn{background:none;border:none;cursor:pointer;font-size:13px;color:#666;padding:0;display:flex;align-items:center;gap:4px;transition:color .15s}
+.context-toggle-btn:hover{color:#333}
+.context-arrow{display:inline-block;transition:transform .2s;font-style:normal}
+.context-wrap.collapsed .context-arrow{transform:rotate(-90deg)}
+
+/* ── ファシリテーターカード ── */
+.facilitate-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.facilitate-header{background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;padding:14px 20px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.facilitate-score-area{display:flex;align-items:center;gap:20px;padding:16px 20px;border-bottom:1px solid #f0f2f5;background:#fffbf5}
+.score-circle{width:72px;height:72px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;transition:background .5s;background:#ccc}
+.score-circle .sv{font-size:24px;line-height:1}
+.score-circle small{font-size:11px;font-weight:400}
+.score-circle.low{background:#e74c3c}.score-circle.mid{background:#f39c12}.score-circle.high{background:#27ae60}
+.score-info{flex:1}
+.score-label{font-size:13px;font-weight:600;color:#555;margin-bottom:7px}
+.score-meter{height:10px;background:#f0f2f5;border-radius:5px;overflow:hidden;margin-bottom:5px}
+.score-meter-fill{height:100%;border-radius:5px;width:0%;transition:width .9s cubic-bezier(.4,0,.2,1)}
+.score-meter-fill.low{background:#e74c3c}.score-meter-fill.mid{background:#f39c12}.score-meter-fill.high{background:#27ae60}
+.extend-badge{display:none;background:#e74c3c;color:#fff;font-size:11px;padding:3px 10px;border-radius:10px;margin-top:4px}
+.facilitate-body{padding:16px 20px;font-size:13.5px;line-height:1.8;color:#333;max-height:400px;overflow-y:auto}
+.facilitate-body h2{font-size:14px;font-weight:700;margin:12px 0 6px;color:#1a1a2e;border-bottom:2px solid #f0f2f5;padding-bottom:4px}
+.facilitate-body p{margin-bottom:7px}.facilitate-body ul,.facilitate-body ol{margin:4px 0 7px 16px}.facilitate-body li{margin-bottom:2px}
+.facilitate-footer{display:none;padding:12px 20px;background:#f8f9fa;border-top:1px solid #eee;align-items:center;gap:12px;flex-wrap:wrap}
+.btn-proceed{background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn-proceed:hover:not(:disabled){opacity:.88}.btn-proceed:disabled{opacity:.5;cursor:not-allowed}
+.extend-note{font-size:12px;color:#e74c3c;font-weight:600}
 </style>
 </head>
 <body>
@@ -129,9 +162,13 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
     <textarea id="question" placeholder="質問・調査内容を入力してください…&#10;例：「日本の少子化問題の根本原因と効果的な対策は？」&#10;&#10;Shift+Enter で改行、Enter で送信"></textarea>
 
     <!-- 参考資料欄 -->
-    <div class="context-wrap">
+    <div class="context-wrap" id="context-wrap">
       <div class="context-toggle">
-        <span class="context-label">📎 参考資料（任意）</span>
+        <span class="context-label">
+          <button class="context-toggle-btn" onclick="toggleContext()">
+            <i class="context-arrow">▼</i> 📎 参考資料（任意）
+          </button>
+        </span>
         <button class="btn-load-self" id="btn-load-self" onclick="loadSelf()">🔄 このシステム自身を読み込む</button>
       </div>
       <div class="context-hint">ここに貼ったテキスト（コード・仕様・資料など）が3者全員に渡されます</div>
@@ -151,6 +188,11 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
       <div class="prog-label">初回回答</div>
     </div>
     <div class="prog-line" id="pline1"></div>
+    <div class="prog-step" id="progF">
+      <div class="prog-circle">F</div>
+      <div class="prog-label">ファシリテーター</div>
+    </div>
+    <div class="prog-line" id="plineF"></div>
     <div class="prog-step" id="prog2">
       <div class="prog-circle">2</div>
       <div class="prog-label">相互レビュー</div>
@@ -173,6 +215,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
         <div class="ai-card-header">
           <div class="ai-icon">💬</div>ChatGPT
           <span class="model-label" id="model-chatgpt"></span>
+          <button class="btn-copy" onclick="copyCard('s1-chatgpt')" title="コピー">📋</button>
         </div>
         <div class="ai-card-body loading" id="s1-chatgpt"><div class="spinner"></div>回答生成中…</div>
         <div class="ai-stats" id="stat1-chatgpt" style="display:none">
@@ -183,6 +226,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
       <div class="ai-card gemini">
         <div class="ai-card-header">
           <div class="ai-icon">✨</div>Gemini
+          <button class="btn-copy" onclick="copyCard('s1-gemini')" title="コピー">📋</button>
         </div>
         <div class="ai-card-body loading" id="s1-gemini"><div class="spinner"></div>回答生成中…</div>
         <div class="ai-stats" id="stat1-gemini" style="display:none">
@@ -193,12 +237,45 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
       <div class="ai-card claude">
         <div class="ai-card-header">
           <div class="ai-icon">🧠</div>Claude
+          <button class="btn-copy" onclick="copyCard('s1-claude')" title="コピー">📋</button>
         </div>
         <div class="ai-card-body loading" id="s1-claude"><div class="spinner"></div>回答生成中…</div>
         <div class="ai-stats" id="stat1-claude" style="display:none">
           <span>📝 <b id="c1-claude">-</b> 字</span>
           <span>❓ <b id="q1-claude">-</b> 質問</span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP F ファシリテーター -->
+  <div class="step-section" id="secF">
+    <div class="step-header">
+      <div class="step-badge" style="background:#e67e22">STEP F</div>
+      <div class="step-title">ファシリテーター分析</div>
+    </div>
+    <div class="facilitate-wrap">
+      <div class="facilitate-header">
+        🎯 ファシリテーター（GPT-4o）による中間分析
+        <button class="btn-copy" style="margin-left:auto" onclick="copyCard('facilitate-body')" title="コピー">📋</button>
+      </div>
+      <div class="facilitate-score-area">
+        <div class="score-circle" id="score-circle">
+          <span class="sv" id="score-value">…</span>
+          <small>点</small>
+        </div>
+        <div class="score-info">
+          <div class="score-label" id="score-label">分析中…</div>
+          <div class="score-meter"><div class="score-meter-fill" id="score-meter-fill"></div></div>
+          <span class="extend-badge" id="extend-badge">⚠️ 完成度70点未満 — Step2での大幅改善を推奨</span>
+        </div>
+      </div>
+      <div class="facilitate-body" id="facilitate-body">
+        <div class="ai-card-body loading"><div class="spinner"></div>ファシリテーター分析中…</div>
+      </div>
+      <div class="facilitate-footer" id="facilitate-footer">
+        <button class="btn-proceed" id="btn-proceed" onclick="proceedToStep2()">→ Step 2（相互レビュー）へ進む</button>
+        <span class="extend-note" id="extend-note" style="display:none">⚠️ 低スコアのため、ファシリテーター指摘事項をStep2に引き継ぎます</span>
       </div>
     </div>
   </div>
@@ -211,7 +288,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
     </div>
     <div class="ai-grid">
       <div class="ai-card chatgpt">
-        <div class="ai-card-header"><div class="ai-icon">💬</div>ChatGPT のレビュー</div>
+        <div class="ai-card-header"><div class="ai-icon">💬</div>ChatGPT のレビュー<button class="btn-copy" onclick="copyCard('s2-chatgpt')" title="コピー">📋</button></div>
         <div class="ai-card-body loading" id="s2-chatgpt"><div class="spinner"></div>レビュー生成中…</div>
         <div class="ai-stats" id="stat2-chatgpt" style="display:none">
           <span>📝 <b id="c2-chatgpt">-</b> 字</span>
@@ -219,7 +296,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
         </div>
       </div>
       <div class="ai-card gemini">
-        <div class="ai-card-header"><div class="ai-icon">✨</div>Gemini のレビュー</div>
+        <div class="ai-card-header"><div class="ai-icon">✨</div>Gemini のレビュー<button class="btn-copy" onclick="copyCard('s2-gemini')" title="コピー">📋</button></div>
         <div class="ai-card-body loading" id="s2-gemini"><div class="spinner"></div>レビュー生成中…</div>
         <div class="ai-stats" id="stat2-gemini" style="display:none">
           <span>📝 <b id="c2-gemini">-</b> 字</span>
@@ -227,7 +304,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
         </div>
       </div>
       <div class="ai-card claude">
-        <div class="ai-card-header"><div class="ai-icon">🧠</div>Claude のレビュー</div>
+        <div class="ai-card-header"><div class="ai-icon">🧠</div>Claude のレビュー<button class="btn-copy" onclick="copyCard('s2-claude')" title="コピー">📋</button></div>
         <div class="ai-card-body loading" id="s2-claude"><div class="spinner"></div>レビュー生成中…</div>
         <div class="ai-stats" id="stat2-claude" style="display:none">
           <span>📝 <b id="c2-claude">-</b> 字</span>
@@ -266,10 +343,45 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 
     <!-- 最終回答 -->
     <div class="final-card">
-      <div class="final-card-header">🏆 最終統合回答（GPT-4o による統合）</div>
+      <div class="final-card-header">
+        🏆 最終統合回答（GPT-4o による統合）
+        <button class="btn-copy" style="background:rgba(255,255,255,.18);border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;color:rgba(255,255,255,.85);margin-left:auto;transition:background .15s" onclick="copyCard('final-body')" title="コピー">📋</button>
+      </div>
       <div class="final-card-body" id="final-body">
         <div style="display:flex;align-items:center;gap:12px;color:#aaa;justify-content:center;padding:40px">
           <div class="spinner"></div>統合回答を生成中…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 追加質問 -->
+  <div class="step-section" id="sec-followup">
+    <div class="step-header">
+      <div class="step-badge" style="background:#16a085">追加質問</div>
+      <div class="step-title">結論に対して追加で質問・リクエスト</div>
+    </div>
+    <div class="input-card">
+      <textarea id="followup-question" placeholder="追加の質問やリクエストを入力…&#10;例：「もっと具体的な実施手順を教えて」「コスト面での比較をして」" style="min-height:70px"></textarea>
+      <div class="input-footer">
+        <span class="hint">前回の全回答が文脈として渡されます</span>
+        <button class="btn-start" id="btn-followup" onclick="startFollowup()" style="background:linear-gradient(135deg,#16a085,#1abc9c)">💬 追加質問を送る</button>
+      </div>
+    </div>
+    <!-- 追加質問の回答 -->
+    <div id="followup-results" style="display:none;margin-top:16px">
+      <div class="ai-grid">
+        <div class="ai-card chatgpt">
+          <div class="ai-card-header"><div class="ai-icon">💬</div>ChatGPT<button class="btn-copy" onclick="copyCard('fq-chatgpt')" title="コピー">📋</button></div>
+          <div class="ai-card-body loading" id="fq-chatgpt"><div class="spinner"></div>回答生成中…</div>
+        </div>
+        <div class="ai-card gemini">
+          <div class="ai-card-header"><div class="ai-icon">✨</div>Gemini<button class="btn-copy" onclick="copyCard('fq-gemini')" title="コピー">📋</button></div>
+          <div class="ai-card-body loading" id="fq-gemini"><div class="spinner"></div>回答生成中…</div>
+        </div>
+        <div class="ai-card claude">
+          <div class="ai-card-header"><div class="ai-icon">🧠</div>Claude<button class="btn-copy" onclick="copyCard('fq-claude')" title="コピー">📋</button></div>
+          <div class="ai-card-body loading" id="fq-claude"><div class="spinner"></div>回答生成中…</div>
         </div>
       </div>
     </div>
@@ -284,25 +396,34 @@ marked.use({ breaks: true, gfm: true });
 const $  = id => document.getElementById(id);
 const AIs = ['chatgpt', 'gemini', 'claude'];
 
-let s1Data = null, s2Data = null;
+let s1Data = null, s2Data = null, fData = null, s3Result = null;
 
 // ── ユーティリティ ──────────────────────────────────────────────────
 function countChars(t)     { return (t || '').length; }
 function countQuestions(t) { return ((t || '').match(/[？?]|【質問】/g) || []).length; }
 
 function setProgress(step) {
-  [1,2,3].forEach(n => {
-    const el = $('prog'+n);
-    if (n < step) {
+  // step: 1=初回, 2=ファシリテーター, 3=相互レビュー, 4=最終統合
+  const ids    = ['1','F','2','3'];
+  const labels = ['1','F','2','3'];
+  const lineIds = ['1','F','2'];
+  ids.forEach((id, i) => {
+    const pos = i + 1;
+    const el  = $('prog' + id);
+    if (!el) return;
+    if (pos < step) {
       el.className = 'prog-step done';
       el.querySelector('.prog-circle').textContent = '✓';
-    } else if (n === step) {
+    } else if (pos === step) {
       el.className = 'prog-step active';
     } else {
       el.className = 'prog-step';
-      el.querySelector('.prog-circle').textContent = n;
+      el.querySelector('.prog-circle').textContent = labels[i];
     }
-    if (n < 3) $('pline'+n).className = n < step ? 'prog-line done' : 'prog-line';
+  });
+  lineIds.forEach((id, i) => {
+    const el = $('pline' + id);
+    if (el) el.className = (i + 1) < step ? 'prog-line done' : 'prog-line';
   });
 }
 
@@ -351,13 +472,69 @@ function resetCards() {
     ['s1-','s2-'].forEach(p => {
       const el = $(p+n);
       if (el) { el.className='ai-card-body loading'; el.innerHTML='<div class="spinner"></div>生成中…'; }
-      const st = $(p.replace('-','')+'-'+n+'-stats') || $('stat'+(p==='s1-'?1:2)+'-'+n);
+      const st = $('stat'+(p==='s1-'?1:2)+'-'+n);
       if (st) st.style.display='none';
     });
   });
   $('contrib-card').style.display = 'none';
   $('final-body').innerHTML = '<div style="display:flex;align-items:center;gap:12px;color:#aaa;justify-content:center;padding:40px"><div class="spinner"></div>統合回答を生成中…</div>';
-  ['sec1','sec2','sec3'].forEach(id => $(id).classList.remove('show'));
+  ['sec1','secF','sec2','sec3','sec-followup'].forEach(id => { const el = $(id); if(el) el.classList.remove('show'); });
+  // ファシリテーターリセット
+  const fb = $('facilitate-body');
+  if (fb) fb.innerHTML = '<div class="ai-card-body loading"><div class="spinner"></div>ファシリテーター分析中…</div>';
+  const ff = $('facilitate-footer'); if (ff) ff.style.display = 'none';
+  const sc = $('score-circle');     if (sc) sc.className = 'score-circle';
+  const sv = $('score-value');      if (sv) sv.textContent = '…';
+  const mf = $('score-meter-fill'); if (mf) { mf.className = 'score-meter-fill'; mf.style.width = '0%'; }
+  const eb = $('extend-badge');     if (eb) eb.style.display = 'none';
+  const sl = $('score-label');      if (sl) sl.textContent = '分析中…';
+  const en = $('extend-note');      if (en) en.style.display = 'none';
+  const bp = $('btn-proceed');      if (bp) bp.disabled = false;
+  // 追加質問リセット
+  const fr = $('followup-results'); if (fr) fr.style.display = 'none';
+  const fq = $('followup-question'); if (fq) fq.value = '';
+  AIs.forEach(n => {
+    const el = $('fq-'+n);
+    if (el) { el.className='ai-card-body loading'; el.innerHTML='<div class="spinner"></div>回答生成中…'; }
+  });
+  fData = null; s3Result = null;
+}
+
+// ── 参考資料折り畳み ────────────────────────────────────────────────
+function toggleContext() {
+  $('context-wrap').classList.toggle('collapsed');
+}
+
+// ── コピー ──────────────────────────────────────────────────────────
+function copyCard(bodyId) {
+  const el = $(bodyId);
+  if (!el) return;
+  const text = el.innerText || el.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const card = el.closest('.ai-card, .facilitate-wrap, .final-card');
+    const btn  = card && card.querySelector('.btn-copy');
+    if (btn) { const orig = btn.textContent; btn.textContent = '✅'; setTimeout(() => { btn.textContent = orig; }, 1500); }
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = el.innerText || '';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  });
+}
+
+// ── ファシリテーター描画 ─────────────────────────────────────────────
+function renderFacilitator(fd) {
+  const score = fd.score || 0;
+  const cls   = score >= 70 ? 'high' : score >= 50 ? 'mid' : 'low';
+  const lbl   = score >= 70 ? '十分な品質です' : score >= 50 ? '改善の余地があります' : '大幅な改善が必要です';
+  const sc = $('score-circle');
+  if (sc) sc.className = 'score-circle ' + cls;
+  const sv = $('score-value');      if (sv) sv.textContent = score;
+  const sl = $('score-label');      if (sl) sl.textContent = `完成度 ${score}点 ─ ${lbl}`;
+  const mf = $('score-meter-fill');
+  if (mf) { mf.className = 'score-meter-fill ' + cls; setTimeout(() => { mf.style.width = score + '%'; }, 50); }
+  const eb = $('extend-badge'); if (eb) eb.style.display = fd.should_extend ? 'inline-block' : 'none';
+  const en = $('extend-note');  if (en) en.style.display = fd.should_extend ? 'inline' : 'none';
+  const fb = $('facilitate-body'); if (fb) fb.innerHTML = marked.parse(fd.report || '⚠️ 分析失敗');
 }
 
 // ── サーバー停止 ────────────────────────────────────────────────────
@@ -391,6 +568,12 @@ async function loadSelf() {
   }
 }
 
+// ── エラー検出 ─────────────────────────────────────────────────────
+function detectErrors(data) {
+  return AIs.filter(n => data[n] && data[n].startsWith('⚠️ エラー:'))
+             .map(n => [n, data[n].slice('⚠️ エラー:'.length).trim()]);
+}
+
 // ── メイン処理 ─────────────────────────────────────────────────────
 async function startDiscussion() {
   const question = $('question').value.trim();
@@ -410,28 +593,116 @@ async function startDiscussion() {
     s1Data = await post('/api/step1', { question, context });
     AIs.forEach(n => renderCard(`s1-${n}`, `stat1-${n}`, `c1-${n}`, `q1-${n}`, s1Data[n]));
 
-    // ── STEP 2 ──
+    // ── エラーチェック：Step2に進む前に確認 ────────────────────────
+    const errors1 = detectErrors(s1Data);
+    if (errors1.length > 0) {
+      const aiNames = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
+      const errMsgs = errors1.map(([n, msg]) => `・${aiNames[n]}: ${msg.substring(0, 100)}`).join('\n');
+      const proceed = confirm(
+        `${errors1.length}件のエラーが発生しました:\n\n${errMsgs}\n\nこのままStep2（相互レビュー）に進みますか？\n（Noを選ぶと最初に戻ります）`
+      );
+      if (!proceed) {
+        resetCards();
+        $('progress-wrap').classList.remove('show');
+        return;
+      }
+    }
+
+    // ── STEP F ── ファシリテーター
     setProgress(2);
-    $('sec2').classList.add('show');
-    scrollTo('sec2');
+    $('secF').classList.add('show');
+    scrollTo('secF');
 
-    s2Data = await post('/api/step2', { question, context, step1: s1Data });
-    AIs.forEach(n => renderCard(`s2-${n}`, `stat2-${n}`, `c2-${n}`, `q2-${n}`, s2Data[n]));
-
-    // ── STEP 3 ──
-    setProgress(3);
-    $('sec3').classList.add('show');
-    scrollTo('sec3');
-    renderContrib(s1Data, s2Data);
-
-    const s3 = await post('/api/step3', { question, context, step1: s1Data, step2: s2Data });
-    $('final-body').innerHTML = marked.parse(s3.result || '⚠️ 取得失敗');
+    fData = await post('/api/step2_5', { question, step1: s1Data });
+    renderFacilitator(fData);
+    $('facilitate-footer').style.display = 'flex';
 
   } catch(e) {
     alert('エラーが発生しました:\n' + e.message);
   } finally {
     $('btn-start').disabled = false;
     $('btn-start').textContent = '🚀 協議開始';
+  }
+}
+
+// ── Step2・3 実行（ファシリテーター確認後） ─────────────────────────
+async function proceedToStep2() {
+  $('btn-proceed').disabled = true;
+  $('btn-start').disabled = true;
+  $('btn-start').textContent = '⏳ 協議中…';
+  const question = $('question').value.trim();
+  const context  = $('context').value.trim();
+
+  try {
+    // ── STEP 2 ──
+    setProgress(3);
+    $('sec2').classList.add('show');
+    scrollTo('sec2');
+
+    const facReport = fData ? fData.report : '';
+    s2Data = await post('/api/step2', { question, context, step1: s1Data, facilitate_report: facReport });
+    AIs.forEach(n => renderCard(`s2-${n}`, `stat2-${n}`, `c2-${n}`, `q2-${n}`, s2Data[n]));
+
+    // ── STEP 3 ──
+    setProgress(4);
+    $('sec3').classList.add('show');
+    scrollTo('sec3');
+    renderContrib(s1Data, s2Data);
+
+    const s3 = await post('/api/step3', { question, context, step1: s1Data, step2: s2Data });
+    s3Result = s3.result || '';
+    $('final-body').innerHTML = marked.parse(s3Result || '⚠️ 取得失敗');
+
+    // 追加質問エリアを表示
+    $('sec-followup').classList.add('show');
+    scrollTo('sec-followup');
+
+  } catch(e) {
+    alert('エラーが発生しました:\n' + e.message);
+  } finally {
+    $('btn-start').disabled = false;
+    $('btn-start').textContent = '🚀 協議開始';
+  }
+}
+
+// ── 追加質問 ────────────────────────────────────────────────────────
+async function startFollowup() {
+  const fq = $('followup-question').value.trim();
+  if (!fq) { alert('追加質問を入力してください'); return; }
+
+  const btn = $('btn-followup');
+  btn.disabled = true;
+  btn.textContent = '⏳ 送信中…';
+
+  const question = $('question').value.trim();
+  const context  = $('context').value.trim();
+
+  // 前回の議論全体を文脈として渡す
+  const prevContext = [
+    `【元の質問】\n${question}`,
+    `【最終統合回答】\n${s3Result || ''}`,
+    s1Data ? `【各AIの初回回答】\nChatGPT: ${s1Data.chatgpt||''}\nGemini: ${s1Data.gemini||''}\nClaude: ${s1Data.claude||''}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const prompt = `以下は前回の議論の概要です。\n\n${prevContext}\n\n【追加質問・リクエスト】\n${fq}`;
+
+  $('followup-results').style.display = 'block';
+  AIs.forEach(n => {
+    const el = $('fq-'+n);
+    if (el) { el.className='ai-card-body loading'; el.innerHTML='<div class="spinner"></div>回答生成中…'; }
+  });
+
+  try {
+    const res = await post('/api/step1', { question: prompt, context: '' });
+    AIs.forEach(n => {
+      const el = $('fq-'+n);
+      if (el) { el.className='ai-card-body'; el.innerHTML=marked.parse(res[n]||'⚠️ 取得失敗'); }
+    });
+  } catch(e) {
+    alert('エラーが発生しました:\n' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💬 追加質問を送る';
   }
 }
 

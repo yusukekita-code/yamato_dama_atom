@@ -1,32 +1,38 @@
 @echo off
-chcp 65001 >nul
-title AI トリオ協議システム
-
-echo.
-echo ==========================================
-echo   AI トリオ協議システム
-echo ==========================================
+echo ========================================
+echo  AI Trio Discussion System
+echo ========================================
 echo.
 
+echo [1] Moving to ai_panel directory...
 cd /d "%~dp0ai_panel"
+echo     %CD%
+echo.
 
-:: .env ファイルの存在チェック
+echo [2] Checking .env file...
 if not exist ".env" (
-    echo [エラー] .env ファイルが見つかりません。
-    echo.
-    echo .env.example をコピーして .env を作成し、
-    echo APIキーを記入してください。
-    echo.
+    echo     ERROR: .env file not found!
+    echo     Please copy .env.example to .env and set your API keys.
     goto :end
 )
+echo     .env found OK
+echo.
 
-:: Python で起動
-py launch.py
+echo [3] Checking Python...
+py --version
 if %errorlevel% neq 0 (
-    python launch.py
+    echo     ERROR: py command failed. Exit code: %errorlevel%
+    goto :end
 )
+echo.
+
+echo [4] Launching server...
+py launch.py
+
+echo.
+echo Server has stopped. Exit code: %errorlevel%
 
 :end
 echo.
-echo ウィンドウを閉じると終了します。
-pause
+echo Press any key to close this window...
+pause > nul

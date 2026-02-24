@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
+import re
 
 load_dotenv()
 
@@ -60,6 +61,43 @@ def ask_claude(prompt: str) -> str:
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.content[0].text
+
+def step2_5_facilitate(question: str, answers: dict) -> dict:
+    """ファシリテーター分析: 合意点・対立点・完成度スコアを返す"""
+    ai_names = {'chatgpt': 'ChatGPT', 'gemini': 'Gemini', 'claude': 'Claude'}
+    valid   = {k: v for k, v in answers.items() if not v.startswith('⚠️ エラー:')}
+    errored = [k for k in answers if k not in valid]
+
+    if not valid:
+        return {'report': '⚠️ 全AIがエラーのため分析できません。', 'score': 0, 'should_extend': True}
+
+    answer_text = '\n\n'.join(f'[{ai_names.get(k, k)}]\n{v}' for k, v in valid.items())
+    error_note  = (
+        f'\n\n※ {", ".join(ai_names.get(k, k) for k in errored)} はエラーのため回答なし。'
+        if errored else ''
+    )
+
+    prompt = (
+        f'あなたは議論のファシリテーターです。以下の質問に対する各AIの回答を分析してください。\n\n'
+        f'質問: {question}{error_note}\n\n'
+        f'=== 各AIの回答 ===\n{answer_text}\n\n'
+        f'以下の形式で出力してください：\n\n'
+        f'## 合意点\n（各AIが共通して述べている重要なポイントを箇条書きで）\n\n'
+        f'## 対立点・見解の相違\n（意見や強調点が異なる部分を具体的に記述。なければ「特になし」）\n\n'
+        f'## 未カバーの重要な疑問\n（議論で答えられていない問いや見落としを箇条書きで）\n\n'
+        f'## ファシリテーター所見\n（議論の評価とStep2での改善提案）\n\n'
+        f'## 完成度スコア: XX点\n'
+        f'（0〜100点。採点基準：質問への網羅性30点、具体性・根拠30点、相互補完性20点、実用的結論20点）'
+    )
+
+    report = ask_gpt(prompt, model=SYNTHESIZER_MODEL)
+    score  = 50
+    m = re.search(r'完成度スコア[：:]\s*(\d+)', report)
+    if m:
+        score = min(100, max(0, int(m.group(1))))
+
+    return {'report': report, 'score': score, 'should_extend': score < 70}
+
 
 CALLERS = {
     'chatgpt': ask_gpt,
@@ -120,7 +158,9 @@ def step2():
     data = request.json
     q, s1 = data['question'], data['step1']
     ctx = data.get('context', '').strip()
+    fac = data.get('facilitate_report', '').strip()
     ctx_part = f"\n【参考資料】\n{ctx}\n" if ctx else ""
+    fac_part = f"\n【ファシリテーター分析（改善の参考に）】\n{fac}\n" if fac else ""
 
     def make_prompt(my_name):
         others = "\n\n".join(
@@ -131,6 +171,7 @@ def step2():
             f"{ctx_part}\n"
             f"【あなたの初回回答】\n{s1[my_name]}\n\n"
             f"【他のAIの回答】\n{others}\n\n"
+            f"{fac_part}"
             f"上記を踏まえて以下を行ってください：\n"
             f"1. 他のAIの回答で評価できる点・参考になる点\n"
             f"2. あなたの回答の補足・修正事項\n"
@@ -139,6 +180,13 @@ def step2():
         )
 
     return jsonify(run_parallel({k: make_prompt(k) for k in CALLERS}))
+
+
+@app.route('/api/step2_5', methods=['POST'])
+def step2_5():
+    data   = request.json
+    result = step2_5_facilitate(data['question'], data['step1'])
+    return jsonify(result)
 
 @app.route('/api/step3', methods=['POST'])
 def step3():

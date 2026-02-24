@@ -36,11 +36,17 @@ def ask_gpt(prompt: str, model: str = None) -> str:
     )
     return resp.choices[0].message.content
 
-GEMINI_FALLBACKS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b']
+GEMINI_FALLBACKS = [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-1.0-pro',
+]
 
 def ask_gemini(prompt: str) -> str:
     models_to_try = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]
-    last_err = None
+    errors = []
     for model_name in models_to_try:
         try:
             try:
@@ -49,9 +55,9 @@ def ask_gemini(prompt: str) -> str:
                 m = genai.GenerativeModel(model_name)
             return m.generate_content(prompt).text
         except Exception as e:
-            last_err = e
+            errors.append(f'  [{model_name}] {e}')
             continue
-    raise last_err
+    raise Exception('全Geminiモデルで失敗しました:\n' + '\n'.join(errors))
 
 def ask_claude(prompt: str) -> str:
     resp = anthropic_client.messages.create(

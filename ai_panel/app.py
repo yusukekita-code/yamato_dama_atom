@@ -17,7 +17,7 @@ anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 OPENAI_MODEL      = os.getenv('OPENAI_MODEL',      'gpt-4o-mini')
-GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-1.5-flash')
+GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.0-flash')
 CLAUDE_MODEL      = os.getenv('CLAUDE_MODEL',      'claude-haiku-4-5-20251001')
 SYNTHESIZER_MODEL = os.getenv('SYNTHESIZER_MODEL', 'gpt-4o')
 
@@ -35,12 +35,22 @@ def ask_gpt(prompt: str, model: str = None) -> str:
     )
     return resp.choices[0].message.content
 
+GEMINI_FALLBACKS = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
+
 def ask_gemini(prompt: str) -> str:
-    try:
-        m = genai.GenerativeModel(GEMINI_MODEL, system_instruction=BASE_SYSTEM)
-    except TypeError:
-        m = genai.GenerativeModel(GEMINI_MODEL)
-    return m.generate_content(prompt).text
+    models_to_try = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]
+    last_err = None
+    for model_name in models_to_try:
+        try:
+            try:
+                m = genai.GenerativeModel(model_name, system_instruction=BASE_SYSTEM)
+            except TypeError:
+                m = genai.GenerativeModel(model_name)
+            return m.generate_content(prompt).text
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
 
 def ask_claude(prompt: str) -> str:
     resp = anthropic_client.messages.create(
@@ -75,14 +85,32 @@ def run_parallel(prompts: dict) -> dict:
 def index():
     return render_template('index.html')
 
+@app.route('/api/load-self', methods=['GET'])
+def load_self():
+    """このシステム自身のソースコードを返す"""
+    base = os.path.dirname(os.path.abspath(__file__))
+    files = {}
+    targets = [('app.py', 'app.py'), ('index.html', 'templates/index.html')]
+    for name, rel in targets:
+        try:
+            with open(os.path.join(base, rel), encoding='utf-8') as f:
+                files[name] = f.read()
+        except Exception as e:
+            files[name] = f'読み込みエラー: {e}'
+    return jsonify(files)
+
 @app.route('/api/step1', methods=['POST'])
 def step1():
-    q = request.json['question']
+    data = request.json
+    q   = data['question']
+    ctx = data.get('context', '').strip()
+    ctx_part = f"\n\n【参考資料】\n{ctx}" if ctx else ""
     prompt = (
         f"以下の質問に詳しく回答してください。\n"
         f"・主要なポイントを明確に述べること\n"
         f"・具体例や根拠を含めること\n"
-        f"・追加情報が必要な場合は【質問】として明記すること\n\n"
+        f"・追加情報が必要な場合は【質問】として明記すること"
+        f"{ctx_part}\n\n"
         f"質問: {q}"
     )
     return jsonify(run_parallel({k: prompt for k in CALLERS}))
@@ -91,13 +119,16 @@ def step1():
 def step2():
     data = request.json
     q, s1 = data['question'], data['step1']
+    ctx = data.get('context', '').strip()
+    ctx_part = f"\n【参考資料】\n{ctx}\n" if ctx else ""
 
     def make_prompt(my_name):
         others = "\n\n".join(
             f"【{n} の回答】\n{r}" for n, r in s1.items() if n != my_name
         )
         return (
-            f"元の質問: {q}\n\n"
+            f"元の質問: {q}\n"
+            f"{ctx_part}\n"
             f"【あなたの初回回答】\n{s1[my_name]}\n\n"
             f"【他のAIの回答】\n{others}\n\n"
             f"上記を踏まえて以下を行ってください：\n"

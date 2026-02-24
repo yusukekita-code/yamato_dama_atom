@@ -26,6 +26,17 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 .btn-start:hover:not(:disabled){transform:translateY(-1px);opacity:.92}
 .btn-start:disabled{opacity:.5;cursor:not-allowed}
 
+/* ── 参考資料欄 ── */
+.context-wrap{margin-top:12px;border-top:1px solid #f0f2f5;padding-top:12px}
+.context-toggle{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.context-label{font-size:13px;font-weight:600;color:#555;display:flex;align-items:center;gap:6px}
+.btn-load-self{background:#f0f2f5;border:1px solid #ddd;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;color:#444;transition:background .15s}
+.btn-load-self:hover{background:#e4e6e9}
+.btn-load-self:disabled{opacity:.5;cursor:not-allowed}
+.context-hint{font-size:11px;color:#aaa;margin-bottom:6px}
+#context{width:100%;height:120px;padding:10px 13px;border:1px solid #e8eaed;border-radius:8px;font-size:12px;font-family:monospace;resize:vertical;color:#333;background:#fafbfc;line-height:1.6}
+#context:focus{outline:none;border-color:#4285f4}
+
 /* ── プログレスバー ── */
 .progress-wrap{display:none;justify-content:center;align-items:center;margin-bottom:22px}
 .progress-wrap.show{display:flex}
@@ -111,6 +122,17 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
   <!-- 入力 -->
   <div class="input-card">
     <textarea id="question" placeholder="質問・調査内容を入力してください…&#10;例：「日本の少子化問題の根本原因と効果的な対策は？」&#10;&#10;Shift+Enter で改行、Enter で送信"></textarea>
+
+    <!-- 参考資料欄 -->
+    <div class="context-wrap">
+      <div class="context-toggle">
+        <span class="context-label">📎 参考資料（任意）</span>
+        <button class="btn-load-self" id="btn-load-self" onclick="loadSelf()">🔄 このシステム自身を読み込む</button>
+      </div>
+      <div class="context-hint">ここに貼ったテキスト（コード・仕様・資料など）が3者全員に渡されます</div>
+      <textarea id="context" placeholder="参考資料をここに貼り付け…（空欄でもOK）"></textarea>
+    </div>
+
     <div class="input-footer">
       <span class="hint">3 AI × 3ステップで協議 ／ 1回あたり約 $0.02〜0.10</span>
       <button class="btn-start" id="btn-start" onclick="startDiscussion()">🚀 協議開始</button>
@@ -333,10 +355,31 @@ function resetCards() {
   ['sec1','sec2','sec3'].forEach(id => $(id).classList.remove('show'));
 }
 
+// ── このシステムを読み込む ──────────────────────────────────────────
+async function loadSelf() {
+  const btn = $('btn-load-self');
+  btn.disabled = true;
+  btn.textContent = '⏳ 読み込み中…';
+  try {
+    const data = await fetch('/api/load-self').then(r => r.json());
+    const text = Object.entries(data)
+      .map(([name, code]) => `=== ${name} ===\n${code}`)
+      .join('\n\n');
+    $('context').value = text;
+    btn.textContent = '✅ 読み込み完了';
+    setTimeout(() => { btn.textContent = '🔄 このシステム自身を読み込む'; btn.disabled = false; }, 2000);
+  } catch(e) {
+    alert('読み込みエラー: ' + e.message);
+    btn.textContent = '🔄 このシステム自身を読み込む';
+    btn.disabled = false;
+  }
+}
+
 // ── メイン処理 ─────────────────────────────────────────────────────
 async function startDiscussion() {
   const question = $('question').value.trim();
   if (!question) { alert('質問を入力してください'); return; }
+  const context = $('context').value.trim();
 
   $('btn-start').disabled = true;
   $('btn-start').textContent = '⏳ 協議中…';
@@ -348,7 +391,7 @@ async function startDiscussion() {
     setProgress(1);
     $('sec1').classList.add('show');
 
-    s1Data = await post('/api/step1', { question });
+    s1Data = await post('/api/step1', { question, context });
     AIs.forEach(n => renderCard(`s1-${n}`, `stat1-${n}`, `c1-${n}`, `q1-${n}`, s1Data[n]));
 
     // ── STEP 2 ──
@@ -356,7 +399,7 @@ async function startDiscussion() {
     $('sec2').classList.add('show');
     scrollTo('sec2');
 
-    s2Data = await post('/api/step2', { question, step1: s1Data });
+    s2Data = await post('/api/step2', { question, context, step1: s1Data });
     AIs.forEach(n => renderCard(`s2-${n}`, `stat2-${n}`, `c2-${n}`, `q2-${n}`, s2Data[n]));
 
     // ── STEP 3 ──
@@ -365,7 +408,7 @@ async function startDiscussion() {
     scrollTo('sec3');
     renderContrib(s1Data, s2Data);
 
-    const s3 = await post('/api/step3', { question, step1: s1Data, step2: s2Data });
+    const s3 = await post('/api/step3', { question, context, step1: s1Data, step2: s2Data });
     $('final-body').innerHTML = marked.parse(s3.result || '⚠️ 取得失敗');
 
   } catch(e) {

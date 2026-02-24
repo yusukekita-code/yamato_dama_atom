@@ -7,7 +7,8 @@ import re
 load_dotenv()
 
 import openai
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import anthropic
 
 app = Flask(__name__)
@@ -15,7 +16,7 @@ app = Flask(__name__)
 # ── クライアント初期化 ──────────────────────────────────────────────
 openai_client    = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+gemini_client    = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
 
 OPENAI_MODEL      = os.getenv('OPENAI_MODEL',      'gpt-4o-mini')
 GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.0-flash')
@@ -41,7 +42,6 @@ GEMINI_FALLBACKS = [
     'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
     'gemini-1.5-pro',
-    'gemini-1.0-pro',
 ]
 
 def ask_gemini(prompt: str) -> str:
@@ -49,11 +49,15 @@ def ask_gemini(prompt: str) -> str:
     errors = []
     for model_name in models_to_try:
         try:
-            try:
-                m = genai.GenerativeModel(model_name, system_instruction=BASE_SYSTEM)
-            except TypeError:
-                m = genai.GenerativeModel(model_name)
-            return m.generate_content(prompt).text
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=BASE_SYSTEM,
+                    max_output_tokens=2000,
+                )
+            )
+            return response.text
         except Exception as e:
             errors.append(f'  [{model_name}] {e}')
             continue

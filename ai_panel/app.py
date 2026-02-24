@@ -20,7 +20,7 @@ anthropic_client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 GEMINI_API_KEY   = os.getenv('GEMINI_API_KEY', '')
 
 OPENAI_MODEL      = os.getenv('OPENAI_MODEL',      'gpt-4o-mini')
-GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.0-flash')
+GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.5-flash')
 CLAUDE_MODEL      = os.getenv('CLAUDE_MODEL',      'claude-haiku-4-5-20251001')
 SYNTHESIZER_MODEL = os.getenv('SYNTHESIZER_MODEL', 'gpt-4o')
 
@@ -40,16 +40,13 @@ def ask_gpt(prompt: str, model: str = None) -> str:
 
 GEMINI_FALLBACKS = [
     'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+    'gemini-2.5-pro',
 ]
 
-_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={key}'
+_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}'
 
 def _gemini_call(model_name: str, prompt: str) -> str:
-    """Gemini v1 REST API を直接呼び出す（ライブラリ非依存）"""
+    """Gemini v1beta REST API を直接呼び出す（ライブラリ非依存）"""
     url     = _GEMINI_ENDPOINT.format(model=model_name, key=GEMINI_API_KEY)
     payload = json.dumps({
         'system_instruction': {'parts': [{'text': BASE_SYSTEM}]},

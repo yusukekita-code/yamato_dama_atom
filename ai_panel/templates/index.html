@@ -153,6 +153,10 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 .btn-proceed:hover:not(:disabled){opacity:.88}.btn-proceed:disabled{opacity:.5;cursor:not-allowed}
 .extend-note{font-size:12px;color:#e74c3c;font-weight:600}
 
+/* ── 接続テストコピーボタン ── */
+.btn-test-copy{background:rgba(255,255,255,.22);border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;color:rgba(255,255,255,.85);transition:background .15s;white-space:nowrap}
+.btn-test-copy:hover{background:rgba(255,255,255,.38)}
+
 /* ── エラーモーダル ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.show{display:flex}
@@ -174,7 +178,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
   <div style="flex:1;min-width:0">
     <h1>🤖 AI トリオ協議システム</h1>
     <p>ChatGPT × Gemini × Claude が協議してベストアンサーを導き出します</p>
-    <div id="test-result-bar" style="display:none;margin-top:8px;display:none;gap:16px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.85)"></div>
+    <div id="test-result-bar" style="display:none;margin-top:8px;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;color:rgba(255,255,255,.85)"></div>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
     <button class="btn-test" id="btn-test" onclick="testConnection()">🔌 接続テスト</button>
@@ -541,11 +545,14 @@ function resetCards() {
 }
 
 // ── 接続テスト ──────────────────────────────────────────────────────
+let lastTestErrors = '';
+
 async function testConnection() {
   const btn = $('btn-test');
   const bar = $('test-result-bar');
   btn.disabled = true;
   btn.textContent = '🔌 テスト中…';
+  lastTestErrors = '';
 
   const aiNames = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
   bar.style.display = 'flex';
@@ -555,18 +562,41 @@ async function testConnection() {
 
   try {
     const res = await fetch('/api/test-connection').then(r => r.json());
-    bar.innerHTML = Object.entries(res).map(([n, r]) => {
-      const cls  = r.ok ? 'ok' : 'ng';
-      const icon = r.ok ? '✅' : '❌';
-      const detail = r.ok ? (r.model || '') : r.error || '';
+    const errors = [];
+    const items = Object.entries(res).map(([n, r]) => {
+      const cls    = r.ok ? 'ok' : 'ng';
+      const icon   = r.ok ? '✅' : '❌';
+      const detail = r.ok ? (r.model || '') : (r.error || '不明なエラー');
+      if (!r.ok) errors.push(`${aiNames[n]||n}: ${detail}`);
       return `<span class="test-item"><span class="test-dot ${cls}"></span>${icon} ${aiNames[n]||n}: ${r.ok ? r.model : detail.substring(0,80)}</span>`;
     }).join('');
+    bar.innerHTML = items;
+    if (errors.length > 0) {
+      lastTestErrors = errors.join('\n');
+      bar.innerHTML += `<button class="btn-test-copy" onclick="copyTestErrors(this)">📋 エラーをコピー</button>`;
+    }
   } catch(e) {
-    bar.innerHTML = `<span>⚠️ テスト失敗: ${e.message}</span>`;
+    lastTestErrors = `テスト失敗: ${e.message}`;
+    bar.innerHTML = `<span>⚠️ ${lastTestErrors}</span><button class="btn-test-copy" onclick="copyTestErrors(this)">📋 コピー</button>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '🔌 接続テスト';
   }
+}
+
+function copyTestErrors(btn) {
+  navigator.clipboard.writeText(lastTestErrors).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✅ コピー完了';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = lastTestErrors;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    const orig = btn.textContent;
+    btn.textContent = '✅ コピー完了';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
 }
 
 // ── エラーモーダル ──────────────────────────────────────────────────

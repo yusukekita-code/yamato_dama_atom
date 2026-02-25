@@ -39,7 +39,7 @@ def ask_gpt(prompt: str, model: str = None) -> str:
             {"role": "system", "content": BASE_SYSTEM},
             {"role": "user",   "content": prompt}
         ],
-        max_tokens=4096
+        max_tokens=8192
     )
     return resp.choices[0].message.content
 
@@ -56,7 +56,7 @@ def _gemini_call(model_name: str, prompt: str) -> str:
     payload = json.dumps({
         'system_instruction': {'parts': [{'text': BASE_SYSTEM}]},
         'contents':           [{'role': 'user', 'parts': [{'text': prompt}]}],
-        'generationConfig':   {'maxOutputTokens': 8192},
+        'generationConfig':   {'maxOutputTokens': 16384},
     }).encode('utf-8')
     req = urllib.request.Request(url, data=payload,
                                  headers={'Content-Type': 'application/json'},

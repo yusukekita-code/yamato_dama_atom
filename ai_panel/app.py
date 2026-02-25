@@ -24,7 +24,12 @@ GEMINI_MODEL      = os.getenv('GEMINI_MODEL',      'gemini-2.5-flash')
 CLAUDE_MODEL      = os.getenv('CLAUDE_MODEL',      'claude-haiku-4-5-20251001')
 SYNTHESIZER_MODEL = os.getenv('SYNTHESIZER_MODEL', 'gpt-4o')
 
-BASE_SYSTEM = "あなたは優秀で論理的なAIアシスタントです。回答は日本語で行ってください。"
+BASE_SYSTEM = (
+    "あなたは優秀で論理的なAIアシスタントです。回答は日本語で行ってください。"
+    "回答は必ずMarkdown形式（見出し・箇条書き・**強調**など）で記述してください。"
+    "プロンプトを生成・提案する場合は、プロンプト本体を <prompt></prompt> タグで囲み、"
+    "タグ内の内容もMarkdown形式で整形してください。"
+)
 
 # ── AI呼び出し関数 ─────────────────────────────────────────────────
 def ask_gpt(prompt: str, model: str = None) -> str:
@@ -34,7 +39,7 @@ def ask_gpt(prompt: str, model: str = None) -> str:
             {"role": "system", "content": BASE_SYSTEM},
             {"role": "user",   "content": prompt}
         ],
-        max_tokens=2000
+        max_tokens=4096
     )
     return resp.choices[0].message.content
 
@@ -76,7 +81,7 @@ def ask_gemini(prompt: str) -> str:
 def ask_claude(prompt: str) -> str:
     resp = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=2000,
+        max_tokens=8192,
         system=BASE_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -275,10 +280,15 @@ def step3():
 [Claude レビュー]
 {s2.get('claude','')}
 
+【出力ルール】
+- 上記各AIの回答はMarkdown形式で記述されている。最終統合回答も必ずMarkdown形式で出力すること
+- 各AIが使用した見出し・箇条書き・強調などの書式を参考にし、同等以上の構造と詳細度で記述すること
+- プレーンテキストへの変換は禁止。見出し（##/###）・箇条書き（-/1.）・**強調**を積極的に使用すること
+
 以上をすべて統合して、以下の形式で出力してください：
 
 ## 最終統合回答
-（ここに包括的・完全な回答を記述）
+（各AIの回答を参考にしたMarkdown形式での包括的・完全な回答）
 
 ## 各AIの貢献分析
 

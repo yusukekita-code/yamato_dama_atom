@@ -492,31 +492,6 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
   </div>
 </div>
 
-<!-- 履歴詳細モーダル -->
-<div class="hist-modal-overlay" id="history-modal" onclick="if(event.target===this)closeHistoryModal()">
-  <div class="hist-modal">
-    <div class="hist-modal-head">
-      <div class="hist-modal-meta">
-        <span id="hist-modal-date">-</span>
-        <span class="hist-modal-score-badge" id="hist-modal-score" style="display:none"></span>
-        <span id="hist-modal-pin-label" style="font-size:11px"></span>
-      </div>
-      <div class="hist-modal-q" id="hist-modal-question"></div>
-    </div>
-    <div class="hist-tabs">
-      <button class="hist-tab-btn active" data-tab="s3" onclick="showHistoryTab('s3')">🏆 最終回答</button>
-      <button class="hist-tab-btn" data-tab="f"  onclick="showHistoryTab('f')">🎯 ファシリテーター</button>
-      <button class="hist-tab-btn" data-tab="s1" onclick="showHistoryTab('s1')">Step 1</button>
-      <button class="hist-tab-btn" data-tab="s2" onclick="showHistoryTab('s2')">Step 2</button>
-    </div>
-    <div class="hist-modal-body" id="hist-modal-body"></div>
-    <div class="hist-modal-footer">
-      <button class="btn-start" id="hist-copy-btn" onclick="copyHistoryContent()" style="padding:8px 20px;font-size:13px">📋 コピー</button>
-      <button class="hist-modal-close-btn" onclick="closeHistoryModal()">✕ 閉じる</button>
-    </div>
-  </div>
-</div>
-
 <!-- エラーモーダル -->
 <div class="modal-overlay" id="error-modal">
   <div class="modal-box">
@@ -929,8 +904,7 @@ async function startFollowup() {
 // ── 履歴機能 ──────────────────────────────────────────────────────────
 const HIST_KEY = 'aiTrio_histories';
 const HIST_MAX = 10;
-let currentHistItem    = null;
-let currentHistContent = '';
+// (履歴詳細はメインウィンドウに直接復元するためモーダル変数は不要)
 
 function loadHistories() {
   try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; }
@@ -1051,72 +1025,60 @@ function confirmDeleteHistory(id) {
 function showHistoryDetail(id) {
   const item = loadHistories().find(h => h.id === id);
   if (!item) return;
-  currentHistItem = item;
 
-  const d = new Date(item.timestamp);
-  $('hist-modal-date').textContent = d.toLocaleString('ja-JP');
-  $('hist-modal-question').textContent = item.question;
+  // UI をリセット（resetCards 内で fData/s3Result が null になるので先に呼ぶ）
+  resetCards();
+  $('progress-wrap').classList.add('show');
 
-  const badge = $('hist-modal-score');
-  if (item.fData != null) {
-    const s  = item.fData.score;
-    const bg = s >= 70 ? '#27ae60' : s >= 50 ? '#f39c12' : '#e74c3c';
-    badge.textContent      = `完成度 ${s}点`;
-    badge.style.background = bg;
-    badge.style.display    = 'inline-block';
-  } else {
-    badge.style.display = 'none';
+  // グローバル変数を復元（追加質問でも使用）
+  s1Data   = item.s1Data   ? JSON.parse(JSON.stringify(item.s1Data))  : null;
+  s2Data   = item.s2Data   ? JSON.parse(JSON.stringify(item.s2Data))  : null;
+  fData    = item.fData    ? { report: item.fData.report, score: item.fData.score, should_extend: false } : null;
+  s3Result = item.s3Result || '';
+
+  // 質問テキストを復元
+  $('question').value = item.question || '';
+
+  // プログレス（全ステップ完了）
+  setProgress(5);
+
+  // Step 1 描画
+  if (s1Data) {
+    $('sec1').classList.add('show');
+    AIs.forEach(n => {
+      if (s1Data[n]) renderCard(`s1-${n}`, `stat1-${n}`, `c1-${n}`, `q1-${n}`, s1Data[n]);
+    });
   }
 
-  const pinLbl = $('hist-modal-pin-label');
-  if (pinLbl) pinLbl.textContent = item.pinned ? '📌 ピン止め中' : '';
-
-  document.querySelectorAll('.hist-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 's3'));
-  showHistoryTab('s3');
-  $('history-modal').classList.add('show');
-}
-
-function showHistoryTab(tab) {
-  if (!currentHistItem) return;
-  document.querySelectorAll('.hist-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-
-  const item  = currentHistItem;
-  const names = { chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude' };
-  let content = '';
-
-  if (tab === 's3') {
-    content = item.s3Result || '（データなし）';
-  } else if (tab === 'f') {
-    content = item.fData ? item.fData.report : '（データなし）';
-  } else if (tab === 's1') {
-    content = ['chatgpt','gemini','claude']
-      .map(n => `## ${names[n]}\n\n${item.s1Data?.[n] || '（データなし）'}`)
-      .join('\n\n---\n\n');
-  } else if (tab === 's2') {
-    content = ['chatgpt','gemini','claude']
-      .map(n => `## ${names[n]} のレビュー\n\n${item.s2Data?.[n] || '（データなし）'}`)
-      .join('\n\n---\n\n');
+  // Facilitator 描画
+  if (fData) {
+    $('secF').classList.add('show');
+    renderFacilitator(fData);
+    $('facilitate-footer').style.display = 'flex';
+    $('btn-proceed').disabled = true;
   }
 
-  currentHistContent            = content;
-  $('hist-modal-body').innerHTML = marked.parse(content);
-}
+  // Step 2 描画
+  if (s2Data) {
+    $('sec2').classList.add('show');
+    AIs.forEach(n => {
+      if (s2Data[n]) renderCard(`s2-${n}`, `stat2-${n}`, `c2-${n}`, `q2-${n}`, s2Data[n]);
+    });
+  }
 
-function copyHistoryContent() {
-  navigator.clipboard.writeText(currentHistContent).then(() => {
-    const btn  = $('hist-copy-btn');
-    const orig = btn.textContent;
-    btn.textContent = '✅ コピー完了';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  }).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = currentHistContent;
-    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-  });
-}
+  // Step 3 描画
+  if (s3Result) {
+    $('sec3').classList.add('show');
+    if (s1Data && s2Data) renderContrib(s1Data, s2Data);
+    $('final-body').innerHTML = marked.parse(s3Result);
+  }
 
-function closeHistoryModal() {
-  $('history-modal').classList.remove('show');
+  // 追加質問エリアを表示
+  $('sec-followup').classList.add('show');
+
+  // パネルを閉じてページ先頭へ
+  toggleHistoryPanel();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // 起動時にバッジ更新

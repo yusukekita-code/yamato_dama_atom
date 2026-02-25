@@ -171,6 +171,22 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
 .modal-btn-reset{background:#fff;border:2px solid #dc3545;color:#dc3545;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
 .modal-btn-reset:hover{background:#dc3545;color:#fff}
 
+/* ── ログボタン ── */
+.btn-log{background:rgba(255,255,255,.92);color:#1a1a2e;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap}
+.btn-log:hover{background:#fff}
+/* ── ログパネル ── */
+.log-panel{position:fixed;bottom:0;left:0;right:0;height:210px;background:#0d1117;color:#c9d1d9;z-index:800;transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;font-family:'Consolas','Courier New',monospace;font-size:12px;box-shadow:0 -4px 24px rgba(0,0,0,.5)}
+.log-panel.show{transform:translateY(0)}
+.log-panel-head{display:flex;align-items:center;gap:10px;padding:5px 14px;background:#161b22;flex-shrink:0;border-bottom:1px solid #30363d}
+.log-panel-title{font-size:12px;font-weight:700;color:#e6edf3}
+.log-panel-acts{margin-left:auto;display:flex;gap:5px}
+.log-panel-btn{background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.65);border-radius:4px;padding:3px 9px;font-size:11px;cursor:pointer;transition:background .15s}
+.log-panel-btn:hover{background:rgba(255,255,255,.22);color:#fff}
+.log-body{flex:1;overflow-y:auto;padding:5px 14px;line-height:1.65}
+.log-line{padding:1px 0;white-space:pre-wrap;word-break:break-all}
+.log-line.INFO{color:#7ee787}.log-line.ERROR{color:#f97583;font-weight:700}
+.log-line.WARN{color:#e3b341}.log-line.RUN{color:#79c0ff;border-top:1px solid #21262d;margin-top:3px;padding-top:3px}
+
 /* ── 履歴ボタン ── */
 .btn-hist{background:rgba(255,255,255,.92);color:#1a1a2e;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap;position:relative}
 .btn-hist:hover{background:#fff}
@@ -236,6 +252,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
   </div>
   <div style="display:flex;gap:10px;align-items:center">
     <button class="btn-test" id="btn-test" onclick="testConnection()">🔌 接続テスト</button>
+    <button class="btn-log"  id="btn-log"  onclick="toggleLogPanel()">🔍 ログ</button>
     <button class="btn-hist" id="btn-hist" onclick="toggleHistoryPanel()">📋 履歴<span class="hist-badge" id="hist-badge"></span></button>
     <button class="btn-shutdown" onclick="shutdownServer()">🔴 サーバーを停止</button>
   </div>
@@ -474,6 +491,19 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px}
   </div>
 
 </main>
+
+<!-- システムログパネル -->
+<div class="log-panel" id="log-panel">
+  <div class="log-panel-head">
+    <span class="log-panel-title">🔍 システムログ（直近2回分）</span>
+    <div class="log-panel-acts">
+      <button class="log-panel-btn" onclick="fetchLogs()">🔄 更新</button>
+      <button class="log-panel-btn" onclick="clearLog()">🗑 クリア</button>
+      <button class="log-panel-btn" onclick="toggleLogPanel()">✕</button>
+    </div>
+  </div>
+  <div class="log-body" id="log-body"><span style="color:rgba(255,255,255,.3)">ログなし</span></div>
+</div>
 
 <!-- 履歴パネル背景 -->
 <div class="hist-overlay" id="hist-overlay" onclick="toggleHistoryPanel()"></div>
@@ -787,6 +817,7 @@ async function startDiscussion() {
 
     s1Data = await post('/api/step1', { question, context });
     AIs.forEach(n => renderCard(`s1-${n}`, `stat1-${n}`, `c1-${n}`, `q1-${n}`, s1Data[n]));
+    await fetchLogs();
 
     // ── エラーチェック：Step2に進む前に確認 ────────────────────────
     const errors1 = detectErrors(s1Data);
@@ -844,9 +875,18 @@ async function proceedToStep2() {
     renderContrib(s1Data, s2Data);
 
     const s3 = await post('/api/step3', { question, context, step1: s1Data, step2: s2Data });
+    if (s3.error) {
+      // Step3 サーバーエラーをUIに表示してログパネルを開く
+      $('sec3').classList.add('show');
+      $('final-body').innerHTML = `<div style="color:#c0392b;background:#fdf2f2;border:1px solid #f5c6cb;border-radius:8px;padding:16px;font-family:monospace;white-space:pre-wrap">⚠️ Step3 エラー\n\n${s3.error}\n\n🔍 ログパネルで詳細を確認してください。</div>`;
+      await fetchLogs();
+      $('log-panel').classList.add('show');
+      return;
+    }
     s3Result = s3.result || '';
     $('final-body').innerHTML = marked.parse(s3Result || '⚠️ 取得失敗');
     saveHistory();
+    await fetchLogs();
 
     // 追加質問エリアを表示
     $('sec-followup').classList.add('show');
@@ -899,6 +939,37 @@ async function startFollowup() {
     btn.disabled = false;
     btn.textContent = '💬 追加質問を送る';
   }
+}
+
+// ── システムログ ────────────────────────────────────────────────────────
+function toggleLogPanel() {
+  const panel = $('log-panel');
+  const opening = !panel.classList.contains('show');
+  panel.classList.toggle('show');
+  if (opening) fetchLogs();
+}
+
+async function fetchLogs() {
+  try {
+    const data = await fetch('/api/logs').then(r => r.json());
+    renderLogs(data.entries || []);
+  } catch(e) { /* サーバー未起動時は無視 */ }
+}
+
+function renderLogs(entries) {
+  const body = $('log-body');
+  if (!entries || entries.length === 0) {
+    body.innerHTML = '<span style="color:rgba(255,255,255,.3)">ログなし</span>';
+    return;
+  }
+  body.innerHTML = entries.map(e =>
+    `<div class="log-line ${e.lv}">[${e.t}][${e.lv.padEnd(5)}] ${e.msg}</div>`
+  ).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() {
+  $('log-body').innerHTML = '<span style="color:rgba(255,255,255,.3)">クリア済み</span>';
 }
 
 // ── 履歴機能 ──────────────────────────────────────────────────────────

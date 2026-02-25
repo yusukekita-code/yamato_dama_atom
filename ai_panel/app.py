@@ -3,6 +3,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
 import re
+import threading
+from datetime import datetime
+from collections import deque
 
 load_dotenv()
 
@@ -13,6 +16,20 @@ import openai
 import anthropic
 
 app = Flask(__name__)
+
+# ── ログバッファ ──────────────────────────────────────────────────────
+_log_lock = threading.Lock()
+_log_buf  = deque(maxlen=80)   # 直近80エントリ（約2回分）
+
+def _log(level: str, msg: str):
+    ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    entry = {'t': ts, 'lv': level, 'msg': msg}
+    with _log_lock:
+        _log_buf.append(entry)
+    print(f'[{ts}][{level:5}] {msg}', flush=True)
+
+def _log_sep(label: str):
+    _log('RUN', f'══ {label} ══')
 
 # ── クライアント初期化 ──────────────────────────────────────────────
 openai_client    = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -138,9 +155,12 @@ def run_parallel(prompts: dict) -> dict:
         for f in as_completed(futs):
             n = futs[f]
             try:
-                out[n] = f.result()
+                result = f.result()
+                out[n] = result
+                _log('INFO', f'  {n}: {len(result):,}文字')
             except Exception as e:
                 out[n] = f"⚠️ エラー: {e}"
+                _log('ERROR', f'  {n}: {type(e).__name__}: {e}')
     return out
 
 # ── ルート ─────────────────────────────────────────────────────────
@@ -208,7 +228,10 @@ def step1():
     q   = data['question']
     ctx = data.get('context', '').strip()
     ctx_part = f"\n\n【参考資料】\n{ctx}" if ctx else ""
+    _log_sep(f'Step1: {q[:40]}')
     prompt = (
+        f"【回答形式】必ずMarkdown形式（## 見出し・箇条書き・**強調**）で記述すること。"
+        f"プロンプトを生成・提案する場合は <prompt></prompt> タグで本文を囲むこと。\n\n"
         f"以下の質問に詳しく回答してください。\n"
         f"・主要なポイントを明確に述べること\n"
         f"・具体例や根拠を含めること\n"
@@ -216,7 +239,9 @@ def step1():
         f"{ctx_part}\n\n"
         f"質問: {q}"
     )
-    return jsonify(run_parallel({k: prompt for k in CALLERS}))
+    result = run_parallel({k: prompt for k in CALLERS})
+    _log('INFO', 'Step1 完了')
+    return jsonify(result)
 
 @app.route('/api/step2', methods=['POST'])
 def step2():
@@ -227,11 +252,15 @@ def step2():
     ctx_part = f"\n【参考資料】\n{ctx}\n" if ctx else ""
     fac_part = f"\n【ファシリテーター分析（改善の参考に）】\n{fac}\n" if fac else ""
 
+    _log_sep('Step2')
+
     def make_prompt(my_name):
         others = "\n\n".join(
             f"【{n} の回答】\n{r}" for n, r in s1.items() if n != my_name
         )
         return (
+            f"【回答形式】必ずMarkdown形式（## 見出し・箇条書き・**強調**）で記述すること。"
+            f"プロンプトを生成・提案する場合は <prompt></prompt> タグで本文を囲むこと。\n\n"
             f"元の質問: {q}\n"
             f"{ctx_part}\n"
             f"【あなたの初回回答】\n{s1[my_name]}\n\n"
@@ -244,41 +273,60 @@ def step2():
             f"4. 残る疑問点があれば【質問】として明記"
         )
 
-    return jsonify(run_parallel({k: make_prompt(k) for k in CALLERS}))
+    result = run_parallel({k: make_prompt(k) for k in CALLERS})
+    _log('INFO', 'Step2 完了')
+    return jsonify(result)
 
 
 @app.route('/api/step2_5', methods=['POST'])
 def step2_5():
+    _log_sep('StepF（ファシリテーター）')
     data   = request.json
     result = step2_5_facilitate(data['question'], data['step1'])
+    _log('INFO', f'StepF 完了 スコア={result.get("score", "?")}')
     return jsonify(result)
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    with _log_lock:
+        entries = list(_log_buf)
+    return jsonify({'entries': entries})
 
 @app.route('/api/step3', methods=['POST'])
 def step3():
     data = request.json
     q, s1, s2 = data['question'], data['step1'], data['step2']
+    _log_sep('Step3（最終統合）')
+
+    # 各回答を上限文字数でトリム（プロンプト肥大化防止）
+    MAX_PER = 6000
+    def trim(text, label):
+        if len(text) > MAX_PER:
+            _log('WARN', f'  {label} を {MAX_PER:,}文字に切り詰め（元: {len(text):,}文字）')
+            return text[:MAX_PER] + '\n\n…[省略]'
+        return text
 
     prompt = f"""質問: {q}
 
 === 各AIの初回回答 ===
 [ChatGPT]
-{s1.get('chatgpt','')}
+{trim(s1.get('chatgpt',''), 'S1-chatgpt')}
 
 [Gemini]
-{s1.get('gemini','')}
+{trim(s1.get('gemini',''), 'S1-gemini')}
 
 [Claude]
-{s1.get('claude','')}
+{trim(s1.get('claude',''), 'S1-claude')}
 
 === 各AIの相互レビュー ===
 [ChatGPT レビュー]
-{s2.get('chatgpt','')}
+{trim(s2.get('chatgpt',''), 'S2-chatgpt')}
 
 [Gemini レビュー]
-{s2.get('gemini','')}
+{trim(s2.get('gemini',''), 'S2-gemini')}
 
 [Claude レビュー]
-{s2.get('claude','')}
+{trim(s2.get('claude',''), 'S2-claude')}
 
 【出力ルール】
 - 上記各AIの回答はMarkdown形式で記述されている。最終統合回答も必ずMarkdown形式で出力すること
@@ -307,9 +355,15 @@ def step3():
 ## 未解決の重要な質問
 （各AIが提起した中で未回答の重要な疑問点があれば列挙）"""
 
-    # Step3はより高品質なモデルで統合
-    result = ask_gpt(prompt, model=SYNTHESIZER_MODEL)
-    return jsonify({'result': result})
+    _log('INFO', f'Step3 プロンプト長: {len(prompt):,}文字')
+    try:
+        result = ask_gpt(prompt, model=SYNTHESIZER_MODEL)
+        _log('INFO', f'Step3 完了: {len(result):,}文字')
+        return jsonify({'result': result})
+    except Exception as e:
+        err_msg = f'{type(e).__name__}: {e}'
+        _log('ERROR', f'Step3 失敗: {err_msg}')
+        return jsonify({'result': '', 'error': err_msg})
 
 @app.route('/api/shutdown', methods=['POST'])
 def shutdown():

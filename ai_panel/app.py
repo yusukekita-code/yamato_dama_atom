@@ -149,7 +149,7 @@ CALLERS = {
     'claude':  ask_claude,
 }
 
-def run_parallel(prompts: dict) -> dict:
+def run_parallel(prompts: dict, max_chars: int = None) -> dict:
     """prompts = {ai_name: prompt}  →  {ai_name: response}"""
     out = {}
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -158,8 +158,12 @@ def run_parallel(prompts: dict) -> dict:
             n = futs[f]
             try:
                 result = f.result()
+                if max_chars and len(result) > max_chars:
+                    _log('WARN', f'  {n}: {len(result):,}文字 → {max_chars:,}文字に強制切り詰め')
+                    result = result[:max_chars] + '\n\n…[省略]'
+                else:
+                    _log('INFO', f'  {n}: {len(result):,}文字')
                 out[n] = result
-                _log('INFO', f'  {n}: {len(result):,}文字')
             except Exception as e:
                 out[n] = f"⚠️ エラー: {e}"
                 _log('ERROR', f'  {n}: {type(e).__name__}: {e}')
@@ -243,7 +247,7 @@ def step1():
         f"{ctx_part}\n\n"
         f"質問: {q}"
     )
-    result = run_parallel({k: prompt for k in CALLERS})
+    result = run_parallel({k: prompt for k in CALLERS}, max_chars=6000)
     _log('INFO', 'Step1 完了')
     return jsonify(result)
 
@@ -279,7 +283,7 @@ def step2():
             f"4. 残る疑問点があれば【質問】として明記"
         )
 
-    result = run_parallel({k: make_prompt(k) for k in CALLERS})
+    result = run_parallel({k: make_prompt(k) for k in CALLERS}, max_chars=6000)
     _log('INFO', 'Step2 完了')
     return jsonify(result)
 
@@ -312,7 +316,13 @@ def step3():
             return text[:MAX_PER] + '\n\n…[省略]'
         return text
 
-    prompt = f"""質問: {q}
+    prompt = f"""【回答ルール（必ず守ること）】
+・HTMLタグ（<h1>/<ul>/<li>等）は使用禁止。##・-・**などMarkdown記法のみを使うこと。
+・見出し（##/###）・箇条書き（-/1.）・**強調**を積極的に使い、構造的に記述すること。
+・プレーンテキストへの変換は禁止。各AIが使用した書式と同等以上の構造・詳細度で記述すること。
+・プロンプト生成時は本文を <prompt></prompt> タグで囲み、タグ内もMarkdown形式で整形すること。
+
+質問: {q}
 
 === 各AIの初回回答 ===
 [ChatGPT]
@@ -333,11 +343,6 @@ def step3():
 
 [Claude レビュー]
 {trim(s2.get('claude',''), 'S2-claude')}
-
-【出力ルール】
-- 上記各AIの回答はMarkdown形式で記述されている。最終統合回答も必ずMarkdown形式で出力すること
-- 各AIが使用した見出し・箇条書き・強調などの書式を参考にし、同等以上の構造と詳細度で記述すること
-- プレーンテキストへの変換は禁止。見出し（##/###）・箇条書き（-/1.）・**強調**を積極的に使用すること
 
 以上をすべて統合して、以下の形式で出力してください：
 
